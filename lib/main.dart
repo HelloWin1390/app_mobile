@@ -21,8 +21,6 @@ class BpnaApp extends StatelessWidget {
   const BpnaApp({super.key});
 
   ThemeData _darkTheme(bool accessibility) {
-    final baseTextScale = accessibility ? 1.14 : 1.0;
-
     return ThemeData(
       brightness: Brightness.dark,
       colorScheme: const ColorScheme.dark(
@@ -34,7 +32,7 @@ class BpnaApp extends StatelessWidget {
       scaffoldBackgroundColor: const Color(0xFF171614),
       useMaterial3: true,
       textTheme: Typography.whiteMountainView.apply(
-        fontSizeFactor: baseTextScale,
+        fontSizeFactor: accessibility ? 1.08 : 1.0,
       ),
       visualDensity: accessibility
           ? VisualDensity.comfortable
@@ -43,8 +41,6 @@ class BpnaApp extends StatelessWidget {
   }
 
   ThemeData _lightTheme(bool accessibility) {
-    final baseTextScale = accessibility ? 1.14 : 1.0;
-
     return ThemeData(
       brightness: Brightness.light,
       colorScheme: const ColorScheme.light(
@@ -56,7 +52,7 @@ class BpnaApp extends StatelessWidget {
       scaffoldBackgroundColor: const Color(0xFFF4F6F8),
       useMaterial3: true,
       textTheme: Typography.blackMountainView.apply(
-        fontSizeFactor: baseTextScale,
+        fontSizeFactor: accessibility ? 1.08 : 1.0,
       ),
       visualDensity: accessibility
           ? VisualDensity.comfortable
@@ -70,23 +66,24 @@ class BpnaApp extends StatelessWidget {
       valueListenable: SettingsService.settingsNotifier,
       builder: (context, settings, _) {
         final isLight = settings.themeMode == AppThemeMode.light;
+        final accessibility = settings.accessibilityMode;
 
         return MaterialApp(
           title: 'BPNA Control',
           debugShowCheckedModeBanner: false,
-          theme: _lightTheme(settings.accessibilityMode),
-          darkTheme: _darkTheme(settings.accessibilityMode),
+          theme: _lightTheme(accessibility),
+          darkTheme: _darkTheme(accessibility),
           themeMode: isLight ? ThemeMode.light : ThemeMode.dark,
           builder: (context, child) {
             final media = MediaQuery.of(context);
 
             return MediaQuery(
               data: media.copyWith(
-                textScaler: settings.accessibilityMode
+                textScaler: accessibility
                     ? const TextScaler.linear(1.14)
-                    : TextScaler.noScaling,
-                boldText: settings.accessibilityMode,
-                highContrast: settings.accessibilityMode,
+                    : const TextScaler.linear(1.0),
+                boldText: accessibility,
+                highContrast: accessibility,
               ),
               child: child ?? const SizedBox.shrink(),
             );

@@ -86,7 +86,7 @@ class AppSettings {
   /// dark / light
   final String themeMode;
 
-  /// Версия интерфейса для слабовидящих
+  /// Отдельная версия интерфейса для слабовидящих
   final bool accessibilityMode;
 
   const AppSettings({
@@ -117,9 +117,12 @@ class AppSettings {
     return AppSettings(
       selectedDeviceId: selectedDeviceId ?? this.selectedDeviceId,
       devices: devices ?? this.devices,
-      extraControlType:
-          ExtraControlType.normalize(extraControlType ?? this.extraControlType),
-      themeMode: AppThemeMode.normalize(themeMode ?? this.themeMode),
+      extraControlType: ExtraControlType.normalize(
+        extraControlType ?? this.extraControlType,
+      ),
+      themeMode: AppThemeMode.normalize(
+        themeMode ?? this.themeMode,
+      ),
       accessibilityMode: accessibilityMode ?? this.accessibilityMode,
     );
   }
@@ -161,11 +164,15 @@ class AppSettings {
 
     try {
       final decoded = jsonDecode(value);
+
       if (decoded is Map<String, dynamic>) {
         return AppSettings.fromJson(decoded);
       }
+
       if (decoded is Map) {
-        return AppSettings.fromJson(Map<String, dynamic>.from(decoded));
+        return AppSettings.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
       }
     } catch (_) {}
 

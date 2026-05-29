@@ -11,7 +11,9 @@ class SettingsService {
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
-    final settings = AppSettings.decode(prefs.getString(_key));
+    final settings = AppSettings.decode(
+      prefs.getString(_key),
+    );
 
     settingsNotifier.value = settings;
 
@@ -20,7 +22,11 @@ class SettingsService {
 
   static Future<void> save(AppSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, settings.encode());
+
+    await prefs.setString(
+      _key,
+      settings.encode(),
+    );
 
     settingsNotifier.value = settings;
   }
@@ -83,8 +89,9 @@ class SettingsService {
         .where((e) => e.id.trim() != deviceId.trim())
         .toList();
 
-    final selectedStillExists =
-        updated.any((e) => e.id.trim() == current.selectedDeviceId.trim());
+    final selectedStillExists = updated.any(
+      (e) => e.id.trim() == current.selectedDeviceId.trim(),
+    );
 
     await save(
       current.copyWith(

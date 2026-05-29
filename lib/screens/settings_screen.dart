@@ -128,11 +128,22 @@ class _SettingsScreenState extends State<SettingsScreen>
   Widget _panel({required Widget child}) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(_accessibility ? 16 : 14),
+      padding: EdgeInsets.all(_accessibility ? 17 : 14),
       decoration: BoxDecoration(
         color: _panelColor(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _borderColor(context)),
+        border: Border.all(
+          color: _borderColor(context),
+        ),
+        boxShadow: Theme.of(context).brightness == Brightness.light
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : [],
       ),
       child: child,
     );
@@ -148,8 +159,9 @@ class _SettingsScreenState extends State<SettingsScreen>
           'Телеметрия вынесена в отдельную вкладку, чтобы данные не дублировались в других разделах настроек.',
           style: TextStyle(
             color: _mutedColor(context),
-            fontSize: _accessibility ? 14 : 12,
+            fontSize: _accessibility ? 15 : 12,
             height: 1.35,
+            fontWeight: _accessibility ? FontWeight.w700 : FontWeight.w400,
           ),
         ),
       ],
@@ -170,13 +182,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                 'Оформление приложения',
                 style: TextStyle(
                   color: _textColor(context),
-                  fontSize: _accessibility ? 17 : 15,
-                  fontWeight: FontWeight.w800,
+                  fontSize: _accessibility ? 18 : 15,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-
               const SizedBox(height: 14),
-
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: isLight,
@@ -185,8 +195,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                   'Светлая тема',
                   style: TextStyle(
                     color: _textColor(context),
-                    fontSize: _accessibility ? 16 : 14,
-                    fontWeight: FontWeight.w700,
+                    fontSize: _accessibility ? 17 : 14,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 subtitle: Text(
@@ -195,12 +205,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                       : 'Сейчас используется тёмное оформление',
                   style: TextStyle(
                     color: _mutedColor(context),
-                    fontSize: _accessibility ? 14 : 12,
+                    fontSize: _accessibility ? 15 : 12,
+                    height: 1.3,
                   ),
                 ),
                 secondary: Icon(
                   isLight ? Icons.light_mode : Icons.dark_mode,
                   color: const Color(0xFF4F98A3),
+                  size: _accessibility ? 30 : 24,
                 ),
                 onChanged: (value) async {
                   await SettingsService.saveThemeMode(
@@ -214,9 +226,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   );
                 },
               ),
-
-              Divider(color: _borderColor(context)),
-
+              Divider(
+                color: _borderColor(context),
+              ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _settings.accessibilityMode,
@@ -225,21 +237,22 @@ class _SettingsScreenState extends State<SettingsScreen>
                   'Версия для слабовидящих',
                   style: TextStyle(
                     color: _textColor(context),
-                    fontSize: _accessibility ? 16 : 14,
-                    fontWeight: FontWeight.w700,
+                    fontSize: _accessibility ? 17 : 14,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 subtitle: Text(
-                  'Увеличенный текст, более крупные элементы и повышенная контрастность',
+                  'Увеличенный текст, более крупные элементы и повышенная контрастность. Работает отдельно от темы.',
                   style: TextStyle(
                     color: _mutedColor(context),
-                    fontSize: _accessibility ? 14 : 12,
+                    fontSize: _accessibility ? 15 : 12,
                     height: 1.3,
                   ),
                 ),
-                secondary: const Icon(
+                secondary: Icon(
                   Icons.visibility,
-                  color: Color(0xFF4F98A3),
+                  color: const Color(0xFF4F98A3),
+                  size: _accessibility ? 30 : 24,
                 ),
                 onChanged: (value) async {
                   await SettingsService.saveAccessibilityMode(value);
@@ -283,7 +296,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         },
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
-          padding: EdgeInsets.all(_accessibility ? 16 : 14),
+          padding: EdgeInsets.all(_accessibility ? 17 : 14),
           decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFF4F98A3).withOpacity(0.16)
@@ -293,6 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               color: isSelected
                   ? const Color(0xFF4F98A3)
                   : _borderColor(context),
+              width: isSelected && _accessibility ? 2 : 1,
             ),
           ),
           child: Row(
@@ -302,7 +316,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 color: isSelected
                     ? const Color(0xFF4F98A3)
                     : _mutedColor(context),
-                size: _accessibility ? 30 : 24,
+                size: _accessibility ? 32 : 24,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -313,8 +327,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                       title,
                       style: TextStyle(
                         color: _textColor(context),
-                        fontSize: _accessibility ? 16 : 14,
-                        fontWeight: FontWeight.w800,
+                        fontSize: _accessibility ? 17 : 14,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -322,8 +336,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                       subtitle,
                       style: TextStyle(
                         color: _mutedColor(context),
-                        fontSize: _accessibility ? 14 : 12,
+                        fontSize: _accessibility ? 15 : 12,
                         height: 1.25,
+                        fontWeight:
+                            _accessibility ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -333,7 +349,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 Icon(
                   Icons.check_circle,
                   color: const Color(0xFF4F98A3),
-                  size: _accessibility ? 28 : 24,
+                  size: _accessibility ? 30 : 24,
                 ),
             ],
           ),
@@ -352,27 +368,23 @@ class _SettingsScreenState extends State<SettingsScreen>
                 'Тип нижнего элемента на экране управления',
                 style: TextStyle(
                   color: _textColor(context),
-                  fontSize: _accessibility ? 17 : 15,
-                  fontWeight: FontWeight.w800,
+                  fontSize: _accessibility ? 18 : 15,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-
               const SizedBox(height: 14),
-
               option(
                 type: ExtraControlType.button,
                 icon: Icons.smart_button,
                 title: 'Кнопка',
                 subtitle: 'Обычное нажатие. Отправляет extra-button.',
               ),
-
               option(
                 type: ExtraControlType.toggle,
                 icon: Icons.toggle_on,
                 title: 'Переключатель',
                 subtitle: 'ON/OFF. Отправляет extra-toggle-on/off.',
               ),
-
               option(
                 type: ExtraControlType.slider,
                 icon: Icons.tune,
