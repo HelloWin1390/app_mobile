@@ -15,16 +15,23 @@ class CommandService {
     };
   }
 
-  static Future<bool> send(String command, {String? deviceId}) async {
+  static Future<bool> send(
+    String command, {
+    String? deviceId,
+  }) async {
     await AuthService.ensureAuth();
 
     try {
-      final selectedDeviceId = deviceId?.trim();
+      final deviceSecret = deviceId?.trim();
 
       final body = <String, dynamic>{
         'command': command,
-        if (selectedDeviceId != null && selectedDeviceId.isNotEmpty)
-          'device_id': selectedDeviceId,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'device_id': deviceSecret,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'secret': deviceSecret,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'device_secret': deviceSecret,
       };
 
       final res = await http.post(
@@ -33,20 +40,66 @@ class CommandService {
         body: jsonEncode(body),
       );
 
-      debugPrint('[COMMAND] POST $kBaseUrl/api/device/command');
       debugPrint('[COMMAND] body: ${jsonEncode(body)}');
       debugPrint('[COMMAND] status: ${res.statusCode}');
       debugPrint('[COMMAND] response: ${res.body}');
 
-      return _isSuccessResponse(res);
+      return res.statusCode >= 200 && res.statusCode < 300;
     } catch (e) {
       debugPrint('[COMMAND] error: $e');
       return false;
     }
   }
 
-  static Future<bool> sendFlashlightToggle({String? deviceId}) async {
-    return send('flashlight-toggle', deviceId: deviceId);
+  static Future<bool> sendMotorPower({
+    required int leftPower,
+    required int rightPower,
+    String? deviceId,
+  }) async {
+    await AuthService.ensureAuth();
+
+    try {
+      final deviceSecret = deviceId?.trim();
+
+      final left = leftPower.clamp(-100, 100);
+      final right = rightPower.clamp(-100, 100);
+
+      final body = <String, dynamic>{
+        'command': 'motor-power',
+        'left_power': left,
+        'right_power': right,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'device_id': deviceSecret,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'secret': deviceSecret,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'device_secret': deviceSecret,
+      };
+
+      final res = await http.post(
+        Uri.parse('$kBaseUrl/api/device/command'),
+        headers: _headers,
+        body: jsonEncode(body),
+      );
+
+      debugPrint('[MOTOR POWER] body: ${jsonEncode(body)}');
+      debugPrint('[MOTOR POWER] status: ${res.statusCode}');
+      debugPrint('[MOTOR POWER] response: ${res.body}');
+
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (e) {
+      debugPrint('[MOTOR POWER] error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> sendFlashlightToggle({
+    String? deviceId,
+  }) async {
+    return send(
+      'flashlight-toggle',
+      deviceId: deviceId,
+    );
   }
 
   static Future<bool> sendExtraControl({
@@ -58,7 +111,7 @@ class CommandService {
     await AuthService.ensureAuth();
 
     try {
-      final selectedDeviceId = deviceId?.trim();
+      final deviceSecret = deviceId?.trim();
 
       String command;
 
@@ -76,8 +129,12 @@ class CommandService {
         if (value != null) 'value': value,
         if (value != null) 'extra_value': value,
         if (enabled != null) 'enabled': enabled,
-        if (selectedDeviceId != null && selectedDeviceId.isNotEmpty)
-          'device_id': selectedDeviceId,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'device_id': deviceSecret,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'secret': deviceSecret,
+        if (deviceSecret != null && deviceSecret.isNotEmpty)
+          'device_secret': deviceSecret,
       };
 
       final res = await http.post(
@@ -86,12 +143,11 @@ class CommandService {
         body: jsonEncode(body),
       );
 
-      debugPrint('[EXTRA] POST $kBaseUrl/api/device/command');
       debugPrint('[EXTRA] body: ${jsonEncode(body)}');
       debugPrint('[EXTRA] status: ${res.statusCode}');
       debugPrint('[EXTRA] response: ${res.body}');
 
-      return _isSuccessResponse(res);
+      return res.statusCode >= 200 && res.statusCode < 300;
     } catch (e) {
       debugPrint('[EXTRA] error: $e');
       return false;
@@ -99,21 +155,10 @@ class CommandService {
   }
 
   static Future<void> stop({String? deviceId}) async {
-    await send('stop', deviceId: deviceId);
-  }
-
-  static bool _isSuccessResponse(http.Response res) {
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      return false;
-    }
-
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic> && decoded.containsKey('success')) {
-        return decoded['success'] == true;
-      }
-    } catch (_) {}
-
-    return true;
+    await sendMotorPower(
+      leftPower: 0,
+      rightPower: 0,
+      deviceId: deviceId,
+    );
   }
 }

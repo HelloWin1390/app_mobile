@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,17 +8,14 @@ import 'package:saver_gallery/saver_gallery.dart';
 
 import '../models/app_settings.dart';
 import '../models/telemetry.dart';
-import '../models/wifi_heatmap.dart';
 import '../services/auth_service.dart';
 import '../services/command_service.dart';
 import '../services/device_service.dart';
 import '../services/mjpeg_avi_recorder.dart';
 import '../services/settings_service.dart';
-import '../services/wifi_map_service.dart';
 import '../services/ws_service.dart';
 import '../widgets/detection_painter.dart';
 import '../widgets/trajectory_painter.dart';
-import '../widgets/wifi_heatmap_panel.dart';
 
 class DroneControlScreen extends StatefulWidget {
   const DroneControlScreen({super.key});
@@ -28,7 +26,6 @@ class DroneControlScreen extends StatefulWidget {
 
 class _DroneControlScreenState extends State<DroneControlScreen> {
   final WsService _ws = WsService();
-  final WifiMapService _wifiMap = WifiMapService();
 
   AppSettings _settings = AppSettings.defaults();
   TelemetryData _telemetry = TelemetryData.empty();
@@ -42,13 +39,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   bool _flashlightOn = false;
   bool _trajectoryEnabled = true;
   bool _detectionEnabled = true;
-  bool _heatmapPanelVisible = false;
-  bool _heatmapLoading = false;
+
   bool _recording = false;
   bool _recordingSaving = false;
-  bool _routeDrawingEnabled = false;
-  bool _routeAutoSavePending = false;
-  bool _heatmapSaving = false;
 
   double _leftMotor = 0;
   double _rightMotor = 0;
@@ -59,26 +52,25 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   Timer? _motorTimer;
   Timer? _sessionTimer;
   Timer? _extraSliderTimer;
-  Timer? _heatmapRefreshTimer;
   Timer? _recordingTimer;
 
   DateTime? _sessionStart;
   DateTime? _recordingStart;
   DateTime? _lastRecordedFrameAt;
+
   Duration _elapsed = Duration.zero;
   Duration _recordingElapsed = Duration.zero;
 
   StreamSubscription? _videoSub;
   StreamSubscription? _telemetrySub;
   StreamSubscription? _detectionSub;
-  StreamSubscription? _wifiSub;
 
-  WifiScanStatus _wifiScanStatus = WifiScanStatus.idle();
-  WifiHeatmapData? _wifiHeatmap;
-  List<WifiRoutePoint> _wifiRoutePoints = [];
   final List<Uint8List> _recordedFrames = [];
 
   String get _selectedDeviceId => _settings.selectedDeviceId;
+
+  bool get _leftMotorActive => _leftMotor.abs() > 0.03;
+  bool get _rightMotorActive => _rightMotor.abs() > 0.03;
 
   @override
   void initState() {
@@ -93,13 +85,19 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       DeviceOrientation.landscapeRight,
     ]);
 
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+    );
   }
 
   Future<void> _restorePortraitMode() async {
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+    );
 
-    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
   }
 
   Future<void> _init() async {
@@ -114,15 +112,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     await AuthService.ensureAuth();
     await DeviceService.ensureControlHeartbeat();
 
-    _ws.reconnectAll(deviceId: settings.selectedDeviceId);
-
-    _wifiSub = _wifiMap.eventStream.listen(_handleWifiEvent);
-
-    if (settings.selectedDeviceId.trim().isNotEmpty) {
-      _wifiMap.connect(deviceId: settings.selectedDeviceId);
-      _loadWifiStatus();
-      _refreshHeatmap();
-    }
+    _ws.reconnectAll(
+      deviceId: settings.selectedDeviceId,
+    );
 
     _videoSub = _ws.videoStream.listen((frame) {
       if (!mounted) return;
@@ -166,7 +158,12 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
 
       if (!mounted) return;
 
-      final newSize = Size(image.width.toDouble(), image.height.toDouble());
+      final newSize = Size(
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
+
+      image.dispose();
 
       if (newSize != _imageSize) {
         setState(() {
@@ -178,341 +175,20 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     }
   }
 
-  void _handleWifiEvent(WifiRealtimeEvent event) {
-    if (!mounted) return;
-
-    if (event.status != null) {
-      final status = event.status!;
-      setState(() {
-        _wifiScanStatus = status;
-        if (status.running && status.mode == 'route') {
-          _routeAutoSavePending = true;
-          _routeDrawingEnabled = false;
-        }
-      });
-    }
-
-    if (event.type == 'scan_complete') {
-      final shouldSaveRouteMap =
-          _routeAutoSavePending && event.completed == true;
-
-      setState(() {
-        _wifiScanStatus = _wifiScanStatus.copyWith(
-          running: false,
-          mode: 'manual',
-          status: 'scan_complete',
-        );
-        _routeDrawingEnabled = false;
-      });
-
-      if (shouldSaveRouteMap) {
-        _handleCompletedRouteScan();
-      } else {
-        _routeAutoSavePending = false;
-      }
-    }
-
-    if (event.type == 'wifi_measurement' ||
-        event.type == 'scan_status' ||
-        event.type == 'scan_complete') {
-      _scheduleHeatmapRefresh();
-    }
-
-    if (event.type == 'scan_notice' && event.message != null) {
-      _showSnack(event.message!);
-    }
-  }
-
-  void _scheduleHeatmapRefresh() {
-    if (_heatmapRefreshTimer?.isActive ?? false) return;
-
-    _heatmapRefreshTimer = Timer(
-      const Duration(milliseconds: 650),
-      _refreshHeatmap,
-    );
-  }
-
-  Future<void> _loadWifiStatus() async {
-    final deviceId = _selectedDeviceId;
-    if (deviceId.isEmpty) return;
-
-    try {
-      final status = await _wifiMap.loadStatus(deviceId);
-      if (!mounted) return;
-
-      setState(() {
-        _wifiScanStatus = status;
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _refreshHeatmap() async {
-    final deviceId = _selectedDeviceId;
-    if (deviceId.isEmpty) return;
-
-    setState(() {
-      _heatmapLoading = true;
-    });
-
-    try {
-      final heatmap = await _wifiMap.loadHeatmap(
-        deviceId: deviceId,
-        widthCells: _wifiScanStatus.width,
-        heightCells: _wifiScanStatus.height,
-        stepCm: _wifiScanStatus.stepCm,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _wifiHeatmap = heatmap;
-        _heatmapLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _heatmapLoading = false;
-      });
-    }
-  }
-
-  Future<void> _toggleHeatmapScan() async {
-    final deviceId = _selectedDeviceId;
-    if (deviceId.isEmpty) {
-      _showSnack('Сначала выбери онлайн-дрон');
-      return;
-    }
-
-    if (DeviceService.controlledDeviceId != deviceId) {
-      _showSnack('Сначала возьми платформу под управление');
-      return;
-    }
-
-    setState(() {
-      _heatmapLoading = true;
-      _heatmapPanelVisible = true;
-    });
-
-    try {
-      final nextStatus = _wifiScanStatus.running
-          ? await _wifiMap.stopScan(deviceId)
-          : await _wifiMap.startScan(deviceId: deviceId);
-
-      if (!mounted) return;
-
-      setState(() {
-        _wifiScanStatus = nextStatus;
-        _heatmapLoading = false;
-        if (!nextStatus.running || nextStatus.mode != 'route') {
-          _routeAutoSavePending = false;
-        }
-      });
-
-      await _refreshHeatmap();
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _heatmapLoading = false;
-      });
-      _showSnack('Не удалось переключить построение Wi-Fi карты');
-    }
-  }
-
-  void _addWifiRoutePoint(WifiRoutePoint point) {
-    if (_wifiScanStatus.running) return;
-
-    final lastPoint = _wifiRoutePoints.isEmpty ? null : _wifiRoutePoints.last;
-    if (lastPoint != null && lastPoint.x == point.x && lastPoint.y == point.y) {
-      return;
-    }
-
-    setState(() {
-      _wifiRoutePoints = [..._wifiRoutePoints, point];
-    });
-  }
-
-  void _toggleRouteDrawing() {
-    if (_wifiScanStatus.running) return;
-
-    setState(() {
-      _heatmapPanelVisible = true;
-      _routeDrawingEnabled = !_routeDrawingEnabled;
-    });
-  }
-
-  void _clearWifiRoute() {
-    if (_wifiScanStatus.running) return;
-
-    setState(() {
-      _wifiRoutePoints = [];
-      _routeDrawingEnabled = false;
-    });
-  }
-
-  Future<void> _startRouteScan() async {
-    final deviceId = _selectedDeviceId;
-    if (deviceId.isEmpty) {
-      _showSnack('Сначала выбери онлайн-дрон');
-      return;
-    }
-
-    if (DeviceService.controlledDeviceId != deviceId) {
-      _showSnack('Сначала возьми платформу под управление');
-      return;
-    }
-
-    if (_wifiRoutePoints.length < 2) {
-      _showSnack('Для маршрута нужно минимум 2 точки');
-      return;
-    }
-
-    setState(() {
-      _heatmapLoading = true;
-      _heatmapPanelVisible = true;
-      _routeDrawingEnabled = false;
-    });
-
-    try {
-      final nextStatus = await _wifiMap.startRouteScan(
-        deviceId: deviceId,
-        width: _wifiScanStatus.width,
-        height: _wifiScanStatus.height,
-        stepCm: _wifiScanStatus.stepCm,
-        points: _wifiRoutePoints,
-      );
-
-      if (!mounted) return;
-
-      if (nextStatus.status == 'error') {
-        setState(() {
-          _heatmapLoading = false;
-          _routeAutoSavePending = false;
-        });
-        _showSnack(nextStatus.message ?? 'Не удалось запустить маршрут');
-        return;
-      }
-
-      setState(() {
-        _wifiScanStatus = nextStatus;
-        _routeAutoSavePending =
-            nextStatus.running && nextStatus.mode == 'route';
-        _heatmapLoading = false;
-      });
-
-      await _refreshHeatmap();
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _heatmapLoading = false;
-        _routeAutoSavePending = false;
-      });
-      _showSnack('Не удалось запустить маршрут Wi-Fi карты');
-    }
-  }
-
-  Future<void> _handleCompletedRouteScan() async {
-    _routeAutoSavePending = false;
-    await _refreshHeatmap();
-    await _saveHeatmapToGallery(saveOnServer: true);
-  }
-
-  Future<void> _saveHeatmapToGallery({required bool saveOnServer}) async {
-    final deviceId = _selectedDeviceId;
-    final heatmap = _wifiHeatmap ??
-        WifiHeatmapData.empty(
-          widthCells: _wifiScanStatus.width,
-          heightCells: _wifiScanStatus.height,
-          stepCm: _wifiScanStatus.stepCm,
-        );
-
-    if (deviceId.isEmpty || heatmap.totalPoints == 0) {
-      _showSnack('Нет данных Wi-Fi карты для сохранения');
-      return;
-    }
-
-    setState(() {
-      _heatmapSaving = true;
-    });
-
-    try {
-      final bytes = await _renderHeatmapPng(heatmap);
-      final stamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'bpna_wifi_map_$stamp.png';
-
-      final result = await SaverGallery.saveImage(
-        bytes,
-        quality: 100,
-        fileName: fileName,
-        androidRelativePath: 'Pictures/BPNA/WiFi',
-        skipIfExists: false,
-      );
-
-      if (saveOnServer) {
-        await _wifiMap.saveHeatmapSnapshot(
-          deviceId: deviceId,
-          name: 'route_$stamp',
-        );
-      }
-
-      _showSnack(
-        result.isSuccess
-            ? 'Wi-Fi карта сохранена в галерею'
-            : 'Ошибка сохранения карты: ${result.errorMessage ?? 'неизвестная ошибка'}',
-      );
-    } catch (e) {
-      _showSnack('Ошибка сохранения Wi-Fi карты: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _heatmapSaving = false;
-        });
-      }
-    }
-  }
-
-  Future<Uint8List> _renderHeatmapPng(WifiHeatmapData heatmap) async {
-    const imageSize = Size(900, 900);
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    WifiHeatmapPainter(
-      data: heatmap,
-      currentX: _wifiScanStatus.x,
-      currentY: _wifiScanStatus.y,
-      routePoints: _wifiRoutePoints,
-      routeActive: _wifiScanStatus.mode == 'route',
-    ).paint(canvas, imageSize);
-
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      imageSize.width.round(),
-      imageSize.height.round(),
-    );
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    picture.dispose();
-    image.dispose();
-
-    if (byteData == null) {
-      throw StateError('Не удалось собрать PNG Wi-Fi карты');
-    }
-
-    return byteData.buffer.asUint8List();
-  }
-
   void _startSession() {
     _sessionStart = DateTime.now();
 
     _sessionTimer?.cancel();
-    _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _sessionStart == null) return;
+    _sessionTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        if (!mounted || _sessionStart == null) return;
 
-      setState(() {
-        _elapsed = DateTime.now().difference(_sessionStart!);
-      });
-    });
+        setState(() {
+          _elapsed = DateTime.now().difference(_sessionStart!);
+        });
+      },
+    );
   }
 
   String get _elapsedStr {
@@ -529,7 +205,10 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: const Color(0xFF2D2C2A)),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: const Color(0xFF2D2C2A),
+      ),
     );
   }
 
@@ -563,6 +242,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
 
     final now = DateTime.now();
     final last = _lastRecordedFrameAt;
+
     if (last != null && now.difference(last).inMilliseconds < 125) {
       return;
     }
@@ -574,6 +254,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   String get _recordingElapsedStr {
     final m = _recordingElapsed.inMinutes;
     final s = _recordingElapsed.inSeconds % 60;
+
     return '${m.toString().padLeft(2, '0')}:'
         '${s.toString().padLeft(2, '0')}';
   }
@@ -587,26 +268,35 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     _recordedFrames
       ..clear()
       ..add(Uint8List.fromList(_lastFrame!));
+
     _recordingStart = DateTime.now();
     _lastRecordedFrameAt = _recordingStart;
+
     _recordingTimer?.cancel();
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _recordingStart == null) return;
-      setState(() {
-        _recordingElapsed = DateTime.now().difference(_recordingStart!);
-      });
-    });
+    _recordingTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        if (!mounted || _recordingStart == null) return;
+
+        setState(() {
+          _recordingElapsed = DateTime.now().difference(_recordingStart!);
+        });
+      },
+    );
 
     setState(() {
       _recording = true;
       _recordingElapsed = Duration.zero;
     });
+
+    _showSnack('Запись начата');
   }
 
   Future<void> _stopRecording() async {
     if (!_recording) return;
 
     final frames = List<Uint8List>.from(_recordedFrames);
+
     _recordingTimer?.cancel();
 
     setState(() {
@@ -618,6 +308,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       setState(() {
         _recordingSaving = false;
       });
+
       _showSnack('Запись пустая');
       return;
     }
@@ -625,6 +316,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     try {
       final stamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'bpna_record_$stamp.avi';
+
       final file = await MjpegAviRecorder.writeAvi(
         frames: frames,
         width: _imageSize.width > 0 ? _imageSize.width.round() : 640,
@@ -665,6 +357,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
 
   Future<void> _toggleRecording() async {
     if (_recordingSaving) return;
+
     if (_recording) {
       await _stopRecording();
     } else {
@@ -696,7 +389,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       deviceId: _selectedDeviceId,
     );
 
-    _showSnack(ok ? 'Доп-команда отправлена' : 'Ошибка отправки команды');
+    _showSnack(
+      ok ? 'Доп-команда отправлена' : 'Ошибка отправки команды',
+    );
   }
 
   Future<void> _setExtraToggle(bool value) async {
@@ -721,56 +416,34 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     });
 
     _extraSliderTimer?.cancel();
-    _extraSliderTimer = Timer(const Duration(milliseconds: 120), () async {
-      final percent = (_extraSliderValue * 100).round();
+    _extraSliderTimer = Timer(
+      const Duration(milliseconds: 120),
+      () async {
+        final percent = (_extraSliderValue * 100).round();
 
-      final ok = await CommandService.sendExtraControl(
-        type: ExtraControlType.slider,
-        value: percent.toDouble(),
-        deviceId: _selectedDeviceId,
-      );
+        final ok = await CommandService.sendExtraControl(
+          type: ExtraControlType.slider,
+          value: percent.toDouble(),
+          deviceId: _selectedDeviceId,
+        );
 
-      if (!ok) {
-        _showSnack('Ошибка отправки значения слайдера');
-      }
-    });
+        if (!ok) {
+          _showSnack('Ошибка отправки значения слайдера');
+        }
+      },
+    );
   }
 
-  String _getDriveCommand() {
-    final l = _leftMotor;
-    final r = _rightMotor;
-
-    const threshold = 0.03;
-
-    final leftForward = l > threshold;
-    final rightForward = r > threshold;
-    final leftBackward = l < -threshold;
-    final rightBackward = r < -threshold;
-
-    if (leftForward && rightForward) {
-      return 'forward';
-    }
-
-    if (leftBackward || rightBackward) {
-      return 'backward';
-    }
-
-    if (leftForward && !rightForward) {
-      return 'left-forward';
-    }
-
-    if (rightForward && !leftForward) {
-      return 'right-forward';
-    }
-
-    return 'stop';
+  int _motorPercentFromSlider(double value) {
+    final normalized = value.clamp(-1.0, 1.0);
+    return (normalized * 100).round().clamp(-100, 100);
   }
 
   void _startMotorLoop() {
     _motorTimer?.cancel();
 
     _motorTimer = Timer.periodic(
-      const Duration(milliseconds: 160),
+      const Duration(milliseconds: 120),
       (_) => _sendMotors(),
     );
 
@@ -783,20 +456,14 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   }
 
   Future<void> _sendMotors() async {
-    final command = _getDriveCommand();
+    final leftPower = _motorPercentFromSlider(_leftMotor);
+    final rightPower = _motorPercentFromSlider(_rightMotor);
 
-    await CommandService.send(command, deviceId: _selectedDeviceId);
-  }
-
-  Future<void> _releaseMotors() async {
-    setState(() {
-      _leftMotor = 0;
-      _rightMotor = 0;
-    });
-
-    _stopMotorLoop();
-
-    await CommandService.send('stop', deviceId: _selectedDeviceId);
+    await CommandService.sendMotorPower(
+      leftPower: leftPower,
+      rightPower: rightPower,
+      deviceId: _selectedDeviceId,
+    );
   }
 
   void _onLeftChanged(double value) {
@@ -817,6 +484,45 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     if (!(_motorTimer?.isActive ?? false)) {
       _startMotorLoop();
     }
+  }
+
+  void _releaseLeftMotor() {
+    setState(() {
+      _leftMotor = 0;
+    });
+
+    if (!_rightMotorActive) {
+      _stopMotorLoop();
+    }
+
+    unawaited(_sendMotors());
+  }
+
+  void _releaseRightMotor() {
+    setState(() {
+      _rightMotor = 0;
+    });
+
+    if (!_leftMotorActive) {
+      _stopMotorLoop();
+    }
+
+    unawaited(_sendMotors());
+  }
+
+  Future<void> _releaseMotors() async {
+    setState(() {
+      _leftMotor = 0;
+      _rightMotor = 0;
+    });
+
+    _stopMotorLoop();
+
+    await CommandService.sendMotorPower(
+      leftPower: 0,
+      rightPower: 0,
+      deviceId: _selectedDeviceId,
+    );
   }
 
   Widget _buildVideoBackground() {
@@ -868,7 +574,10 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
                     SizedBox(height: 12),
                     Text(
                       'Нет видео сигнала',
-                      style: TextStyle(color: Color(0xFF797876), fontSize: 15),
+                      style: TextStyle(
+                        color: Color(0xFF797876),
+                        fontSize: 15,
+                      ),
                     ),
                   ],
                 ),
@@ -878,13 +587,17 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   }
 
   int get _signalBars {
-    if (!_videoConnected && !_telemetry.connected) return 0;
+    if (!_videoConnected && !_telemetry.connected) {
+      return 0;
+    }
 
     final rssi = _telemetry.wifiRssiDbm;
+
     if (rssi == null) return 2;
     if (rssi >= -55) return 4;
     if (rssi >= -67) return 3;
     if (rssi >= -78) return 2;
+
     return 1;
   }
 
@@ -911,18 +624,22 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       height: 18,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(4, (index) {
-          final active = index < bars;
-          return Container(
-            width: 4,
-            height: 6.0 + index * 3.0,
-            margin: const EdgeInsets.only(right: 2),
-            decoration: BoxDecoration(
-              color: active ? color : Colors.white.withOpacity(0.22),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          );
-        }),
+        children: List.generate(
+          4,
+          (index) {
+            final active = index < bars;
+
+            return Container(
+              width: 4,
+              height: 6.0 + index * 3.0,
+              margin: const EdgeInsets.only(right: 2),
+              decoration: BoxDecoration(
+                color: active ? color : Colors.white.withOpacity(0.22),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -931,7 +648,11 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: const Color(0xFFCDCCCA), size: 16),
+        Icon(
+          icon,
+          color: const Color(0xFFCDCCCA),
+          size: 16,
+        ),
         const SizedBox(width: 4),
         Text(
           text,
@@ -949,9 +670,11 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     final tempText = _telemetry.temperature != null
         ? '${_telemetry.temperature!.toStringAsFixed(1)}°C'
         : '-°C';
+
     final batteryText = _telemetry.battery != null
         ? '${_telemetry.battery!.toStringAsFixed(0)}%'
         : '-%';
+
     final pingText = _telemetry.pingStr;
 
     final deviceText = _telemetry.deviceId?.trim().isNotEmpty == true
@@ -964,7 +687,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.90),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.12),
+        ),
       ),
       child: Row(
         children: [
@@ -981,7 +706,11 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
           Expanded(
             child: Row(
               children: [
-                const Icon(Icons.memory, color: Color(0xFFCDCCCA), size: 16),
+                const Icon(
+                  Icons.memory,
+                  color: Color(0xFFCDCCCA),
+                  size: 16,
+                ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -1016,9 +745,15 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       onPressed: onPressed,
       style: IconButton.styleFrom(
         backgroundColor: Colors.black.withOpacity(0.62),
-        side: BorderSide(color: Colors.white.withOpacity(0.12)),
+        side: BorderSide(
+          color: Colors.white.withOpacity(0.12),
+        ),
       ),
-      icon: Icon(icon, color: color, size: 22),
+      icon: Icon(
+        icon,
+        color: color,
+        size: 22,
+      ),
     );
   }
 
@@ -1029,7 +764,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF1C1B19).withOpacity(0.90),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.12),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1065,83 +802,21 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     );
   }
 
-  Widget _heatmapActionButton() {
-    final active = _wifiScanStatus.running || _heatmapPanelVisible;
-    final color = _wifiScanStatus.running
-        ? const Color(0xFF6DAA45)
-        : (active ? const Color(0xFF4F98A3) : const Color(0xFFCDCCCA));
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        _actionButton(
-          icon: Icons.grid_view,
-          active: active,
-          activeColor: color,
-          onPressed: () {
-            if (_wifiScanStatus.running) {
-              setState(() {
-                _heatmapPanelVisible = !_heatmapPanelVisible;
-              });
-            } else if (_heatmapPanelVisible) {
-              setState(() {
-                _heatmapPanelVisible = false;
-                _routeDrawingEnabled = false;
-              });
-            } else {
-              setState(() {
-                _heatmapPanelVisible = true;
-              });
-              _loadWifiStatus();
-              _refreshHeatmap();
-            }
-          },
-        ),
-        Positioned(
-          right: 2,
-          top: 2,
-          child: GestureDetector(
-            onTap: _toggleHeatmapScan,
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: _wifiScanStatus.running
-                    ? const Color(0xFF6DAA45)
-                    : const Color(0xFF4F98A3),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.black, width: 2),
-              ),
-              child: _heatmapLoading
-                  ? const Padding(
-                      padding: EdgeInsets.all(2),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.4,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(
-                      _wifiScanStatus.running ? Icons.stop : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 10,
-                    ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _rightActionBar() {
     return Positioned(
       right: 12,
       top: 62,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 6,
+          vertical: 5,
+        ),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.42),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.10)),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.10),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1151,9 +826,13 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
               const SizedBox(width: 4),
             ],
             _recordActionButton(),
-            _actionButton(icon: Icons.camera_alt, onPressed: _takeSnapshot),
             _actionButton(
-              icon: _flashlightOn ? Icons.flashlight_on : Icons.flashlight_off,
+              icon: Icons.camera_alt,
+              onPressed: _takeSnapshot,
+            ),
+            _actionButton(
+              icon:
+                  _flashlightOn ? Icons.flashlight_on : Icons.flashlight_off,
               active: _flashlightOn,
               activeColor: const Color(0xFFFFD166),
               onPressed: _toggleFlashlight,
@@ -1176,28 +855,8 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
                 });
               },
             ),
-            _heatmapActionButton(),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _heatmapOverlay() {
-    return Positioned(
-      top: 116,
-      right: 118,
-      child: WifiHeatmapPanel(
-        data: _wifiHeatmap,
-        status: _wifiScanStatus,
-        loading: _heatmapLoading,
-        routeDrawingEnabled: _routeDrawingEnabled,
-        savingMap: _heatmapSaving,
-        routePoints: _wifiRoutePoints,
-        onRoutePointAdded: _addWifiRoutePoint,
-        onRouteDrawingToggle: _toggleRouteDrawing,
-        onRouteClear: _clearWifiRoute,
-        onRouteStart: _startRouteScan,
       ),
     );
   }
@@ -1212,11 +871,16 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         bottom: 18,
         child: Center(
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 10,
+            ),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.62),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withOpacity(0.14)),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.14),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1247,11 +911,16 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         right: 170,
         bottom: 18,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 10,
+          ),
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.62),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.14)),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.14),
+            ),
           ),
           child: Row(
             children: [
@@ -1300,7 +969,10 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF4F98A3),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 15),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 34,
+              vertical: 15,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -1329,13 +1001,19 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
             await _stopRecording();
           }
 
+          await _releaseMotors();
+
           if (!mounted) return;
+
           Navigator.pop(context);
         },
         style: IconButton.styleFrom(
           backgroundColor: Colors.black.withOpacity(0.58),
         ),
-        icon: const Icon(Icons.arrow_back, color: Color(0xFFCDCCCA)),
+        icon: const Icon(
+          Icons.arrow_back,
+          color: Color(0xFFCDCCCA),
+        ),
       ),
     );
   }
@@ -1353,7 +1031,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         children: [
           _buildVideoBackground(),
           Positioned.fill(
-            child: Container(color: Colors.black.withOpacity(0.10)),
+            child: Container(
+              color: Colors.black.withOpacity(0.10),
+            ),
           ),
           if (_trajectoryEnabled)
             Positioned.fill(
@@ -1370,9 +1050,13 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
             child: Stack(
               children: [
                 _backButton(),
-                Positioned(left: 66, right: 10, top: 6, child: _topStatusBar()),
+                Positioned(
+                  left: 66,
+                  right: 10,
+                  top: 6,
+                  child: _topStatusBar(),
+                ),
                 _rightActionBar(),
-                if (_heatmapPanelVisible) _heatmapOverlay(),
                 Positioned(
                   left: 16,
                   top: 70,
@@ -1382,7 +1066,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
                       value: _leftMotor,
                       trackHeight: sliderTrackHeight,
                       onChanged: _onLeftChanged,
-                      onRelease: _releaseMotors,
+                      onRelease: _releaseLeftMotor,
                     ),
                   ),
                 ),
@@ -1395,7 +1079,7 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
                       value: _rightMotor,
                       trackHeight: sliderTrackHeight,
                       onChanged: _onRightChanged,
-                      onRelease: _releaseMotors,
+                      onRelease: _releaseRightMotor,
                     ),
                   ),
                 ),
@@ -1413,19 +1097,17 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     _videoSub?.cancel();
     _telemetrySub?.cancel();
     _detectionSub?.cancel();
-    _wifiSub?.cancel();
 
     _motorTimer?.cancel();
     _sessionTimer?.cancel();
     _extraSliderTimer?.cancel();
-    _heatmapRefreshTimer?.cancel();
     _recordingTimer?.cancel();
 
-    CommandService.stop(deviceId: _selectedDeviceId);
+    CommandService.stop(
+      deviceId: _selectedDeviceId,
+    );
 
     _ws.dispose();
-    _wifiMap.dispose();
-
     _restorePortraitMode();
 
     super.dispose();
@@ -1444,6 +1126,14 @@ class _MotorSlider extends StatelessWidget {
     required this.onChanged,
     required this.onRelease,
   });
+
+  void _softSliderHaptic() {
+    unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _releaseSliderHaptic() {
+    unawaited(HapticFeedback.lightImpact());
+  }
 
   String get _label {
     if (value > 0.10) return 'FWD';
@@ -1471,11 +1161,16 @@ class _MotorSlider extends StatelessWidget {
       children: [
         Container(
           width: 82,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 7,
+          ),
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.62),
             borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.12),
+            ),
           ),
           child: Column(
             children: [
@@ -1494,18 +1189,32 @@ class _MotorSlider extends StatelessWidget {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
+            _softSliderHaptic();
             _updateValueFromPosition(details.localPosition);
           },
-          onTapUp: (_) => onRelease(),
-          onTapCancel: onRelease,
+          onTapUp: (_) {
+            _releaseSliderHaptic();
+            onRelease();
+          },
+          onTapCancel: () {
+            _releaseSliderHaptic();
+            onRelease();
+          },
           onVerticalDragStart: (details) {
+            _softSliderHaptic();
             _updateValueFromPosition(details.localPosition);
           },
           onVerticalDragUpdate: (details) {
             _updateValueFromPosition(details.localPosition);
           },
-          onVerticalDragEnd: (_) => onRelease(),
-          onVerticalDragCancel: onRelease,
+          onVerticalDragEnd: (_) {
+            _releaseSliderHaptic();
+            onRelease();
+          },
+          onVerticalDragCancel: () {
+            _releaseSliderHaptic();
+            onRelease();
+          },
           child: SizedBox(
             width: 86,
             height: trackHeight,
@@ -1516,7 +1225,9 @@ class _MotorSlider extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.58),
                   borderRadius: BorderRadius.circular(40),
-                  border: Border.all(color: Colors.white.withOpacity(0.16)),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.16),
+                  ),
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -1578,9 +1289,8 @@ class _MotorSlider extends StatelessWidget {
                             boxShadow: value.abs() > 0.04
                                 ? [
                                     BoxShadow(
-                                      color: const Color(
-                                        0xFF4F98A3,
-                                      ).withOpacity(0.48),
+                                      color: const Color(0xFF4F98A3)
+                                          .withOpacity(0.48),
                                       blurRadius: 18,
                                       spreadRadius: 2,
                                     ),

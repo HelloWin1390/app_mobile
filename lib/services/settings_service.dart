@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_settings.dart';
@@ -5,14 +6,23 @@ import '../models/app_settings.dart';
 class SettingsService {
   static const String _key = 'bpna_app_settings';
 
+  static final ValueNotifier<AppSettings> settingsNotifier =
+      ValueNotifier<AppSettings>(AppSettings.defaults());
+
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
-    return AppSettings.decode(prefs.getString(_key));
+    final settings = AppSettings.decode(prefs.getString(_key));
+
+    settingsNotifier.value = settings;
+
+    return settings;
   }
 
   static Future<void> save(AppSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, settings.encode());
+
+    settingsNotifier.value = settings;
   }
 
   static Future<void> saveExtraControlType(String type) async {
@@ -21,6 +31,26 @@ class SettingsService {
     await save(
       current.copyWith(
         extraControlType: ExtraControlType.normalize(type),
+      ),
+    );
+  }
+
+  static Future<void> saveThemeMode(String themeMode) async {
+    final current = await load();
+
+    await save(
+      current.copyWith(
+        themeMode: AppThemeMode.normalize(themeMode),
+      ),
+    );
+  }
+
+  static Future<void> saveAccessibilityMode(bool enabled) async {
+    final current = await load();
+
+    await save(
+      current.copyWith(
+        accessibilityMode: enabled,
       ),
     );
   }
@@ -66,6 +96,11 @@ class SettingsService {
 
   static Future<void> selectDevice(String deviceId) async {
     final current = await load();
-    await save(current.copyWith(selectedDeviceId: deviceId));
+
+    await save(
+      current.copyWith(
+        selectedDeviceId: deviceId,
+      ),
+    );
   }
 }

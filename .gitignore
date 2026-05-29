@@ -13,6 +13,12 @@ android/app/build/
 android/local.properties
 android/key.properties
 
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
 # Generated outputs
 *.apk
 *.aab
@@ -22,7 +28,7 @@ android/key.properties
 *.avi
 *.mkv
 
-# Flutter SDK - если случайно лежит внутри проекта
+# Flutter SDK accidentally copied into project
 flutter/
 
 # IDE

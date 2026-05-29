@@ -29,6 +29,31 @@ class ExtraControlType {
   }
 }
 
+class AppThemeMode {
+  static const String dark = 'dark';
+  static const String light = 'light';
+
+  static const List<String> values = [
+    dark,
+    light,
+  ];
+
+  static String normalize(String? value) {
+    if (value == null) return dark;
+    return values.contains(value) ? value : dark;
+  }
+
+  static String title(String value) {
+    switch (normalize(value)) {
+      case light:
+        return 'Светлая тема';
+      case dark:
+      default:
+        return 'Тёмная тема';
+    }
+  }
+}
+
 class EspDevice {
   final String id;
   final String name;
@@ -58,10 +83,18 @@ class AppSettings {
   /// button / toggle / slider
   final String extraControlType;
 
+  /// dark / light
+  final String themeMode;
+
+  /// Версия интерфейса для слабовидящих
+  final bool accessibilityMode;
+
   const AppSettings({
     required this.selectedDeviceId,
     required this.devices,
     required this.extraControlType,
+    required this.themeMode,
+    required this.accessibilityMode,
   });
 
   factory AppSettings.defaults() {
@@ -69,6 +102,8 @@ class AppSettings {
       selectedDeviceId: '',
       devices: [],
       extraControlType: ExtraControlType.button,
+      themeMode: AppThemeMode.dark,
+      accessibilityMode: false,
     );
   }
 
@@ -76,12 +111,16 @@ class AppSettings {
     String? selectedDeviceId,
     List<EspDevice>? devices,
     String? extraControlType,
+    String? themeMode,
+    bool? accessibilityMode,
   }) {
     return AppSettings(
       selectedDeviceId: selectedDeviceId ?? this.selectedDeviceId,
       devices: devices ?? this.devices,
       extraControlType:
           ExtraControlType.normalize(extraControlType ?? this.extraControlType),
+      themeMode: AppThemeMode.normalize(themeMode ?? this.themeMode),
+      accessibilityMode: accessibilityMode ?? this.accessibilityMode,
     );
   }
 
@@ -89,6 +128,8 @@ class AppSettings {
         'selectedDeviceId': selectedDeviceId,
         'devices': devices.map((e) => e.toJson()).toList(),
         'extraControlType': extraControlType,
+        'themeMode': themeMode,
+        'accessibilityMode': accessibilityMode,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -106,6 +147,10 @@ class AppSettings {
       extraControlType: ExtraControlType.normalize(
         json['extraControlType']?.toString(),
       ),
+      themeMode: AppThemeMode.normalize(
+        json['themeMode']?.toString(),
+      ),
+      accessibilityMode: json['accessibilityMode'] == true,
     );
   }
 
@@ -118,6 +163,9 @@ class AppSettings {
       final decoded = jsonDecode(value);
       if (decoded is Map<String, dynamic>) {
         return AppSettings.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return AppSettings.fromJson(Map<String, dynamic>.from(decoded));
       }
     } catch (_) {}
 
