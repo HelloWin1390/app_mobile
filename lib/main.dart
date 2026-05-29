@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'screens/main_menu_screen.dart';
+import 'screens/auth_gate_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   runApp(const BpnaApp());
 }
@@ -29,7 +27,7 @@ class BpnaApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF171614),
         useMaterial3: true,
       ),
-      home: const MainMenuScreen(),
+      home: const AuthGateScreen(),
     );
   }
 }

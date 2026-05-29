@@ -19,11 +19,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final WsService _ws = WsService();
 
-  final TextEditingController _deviceNameController =
-      TextEditingController();
-  final TextEditingController _deviceIdController =
-      TextEditingController();
-
   StreamSubscription? _telemetrySub;
 
   AppSettings _settings = AppSettings.defaults();
@@ -83,48 +78,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _addDevice() async {
-    final id = _deviceIdController.text.trim();
-    final name = _deviceNameController.text.trim();
-
-    if (id.isEmpty) {
-      _showSnack('Введите Device ID / secret');
-      return;
-    }
-
-    await SettingsService.addDevice(
-      EspDevice(
-        id: id,
-        name: name.isEmpty ? id : name,
-      ),
-    );
-
-    _deviceIdController.clear();
-    _deviceNameController.clear();
-
-    await _reloadSettings();
-
-    _showSnack('ESP добавлен');
-  }
-
-  Future<void> _selectDevice(String id) async {
-    await SettingsService.selectDevice(id);
-
-    await _reloadSettings();
-
-    _ws.connectTelemetry(deviceId: id);
-
-    _showSnack('ESP выбран');
-  }
-
-  Future<void> _removeDevice(String id) async {
-    await SettingsService.removeDevice(id);
-
-    await _reloadSettings();
-
-    _showSnack('ESP удалён');
-  }
-
   Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(
@@ -153,45 +106,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         border: Border.all(color: const Color(0xFF393836)),
       ),
       child: child,
-    );
-  }
-
-  Widget _input({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-  }) {
-    return TextField(
-      controller: controller,
-      style: const TextStyle(
-        color: Color(0xFFCDCCCA),
-        fontSize: 14,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(
-          color: Color(0xFF797876),
-        ),
-        prefixIcon: Icon(
-          icon,
-          color: const Color(0xFF797876),
-          size: 19,
-        ),
-        filled: true,
-        fillColor: const Color(0xFF171614),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Color(0xFF393836),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Color(0xFF4F98A3),
-          ),
-        ),
-      ),
     );
   }
 
@@ -313,113 +227,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildDevices() {
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'ESP, которыми можно управлять',
-            style: TextStyle(
-              color: Color(0xFFCDCCCA),
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _input(
-            controller: _deviceNameController,
-            label: 'Название ESP',
-            icon: Icons.drive_file_rename_outline,
-          ),
-          const SizedBox(height: 10),
-          _input(
-            controller: _deviceIdController,
-            label: 'Device ID / secret',
-            icon: Icons.memory,
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _addDevice,
-              icon: const Icon(Icons.add),
-              label: const Text('Добавить ESP'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF4F98A3),
-                side: const BorderSide(
-                  color: Color(0xFF4F98A3),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 13),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (_settings.devices.isEmpty)
-            const Text(
-              'ESP пока не добавлены. Если оставить список пустым, приложение будет работать без выбора device_id.',
-              style: TextStyle(
-                color: Color(0xFF797876),
-                fontSize: 12,
-              ),
-            )
-          else
-            ..._settings.devices.map(
-              (device) {
-                final selected = device.id == _settings.selectedDeviceId;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF171614),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: selected
-                          ? const Color(0xFF4F98A3)
-                          : const Color(0xFF393836),
-                    ),
-                  ),
-                  child: ListTile(
-                    leading: Radio<String>(
-                      value: device.id,
-                      groupValue: _settings.selectedDeviceId,
-                      activeColor: const Color(0xFF4F98A3),
-                      onChanged: (value) {
-                        if (value != null) {
-                          _selectDevice(value);
-                        }
-                      },
-                    ),
-                    title: Text(
-                      device.name,
-                      style: const TextStyle(
-                        color: Color(0xFFCDCCCA),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text(
-                      device.id,
-                      style: const TextStyle(
-                        color: Color(0xFF797876),
-                        fontSize: 12,
-                      ),
-                    ),
-                    trailing: IconButton(
-                      onPressed: () => _removeDevice(device.id),
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Color(0xFFDD6974),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -451,9 +258,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 18),
                 _sectionTitle('Доп-управление'),
                 _buildExtraControlSettings(),
-                const SizedBox(height: 18),
-                _sectionTitle('ESP устройства'),
-                _buildDevices(),
                 const SizedBox(height: 24),
               ],
             ),
@@ -464,9 +268,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _telemetrySub?.cancel();
     _ws.dispose();
-
-    _deviceNameController.dispose();
-    _deviceIdController.dispose();
 
     super.dispose();
   }

@@ -15,23 +15,16 @@ class CommandService {
     };
   }
 
-  static Future<bool> send(
-    String command, {
-    String? deviceId,
-  }) async {
+  static Future<bool> send(String command, {String? deviceId}) async {
     await AuthService.ensureAuth();
 
     try {
-      final deviceSecret = deviceId?.trim();
+      final selectedDeviceId = deviceId?.trim();
 
       final body = <String, dynamic>{
         'command': command,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'device_id': deviceSecret,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'secret': deviceSecret,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'device_secret': deviceSecret,
+        if (selectedDeviceId != null && selectedDeviceId.isNotEmpty)
+          'device_id': selectedDeviceId,
       };
 
       final res = await http.post(
@@ -45,20 +38,15 @@ class CommandService {
       debugPrint('[COMMAND] status: ${res.statusCode}');
       debugPrint('[COMMAND] response: ${res.body}');
 
-      return res.statusCode >= 200 && res.statusCode < 300;
+      return _isSuccessResponse(res);
     } catch (e) {
       debugPrint('[COMMAND] error: $e');
       return false;
     }
   }
 
-  static Future<bool> sendFlashlightToggle({
-    String? deviceId,
-  }) async {
-    return send(
-      'flashlight-toggle',
-      deviceId: deviceId,
-    );
+  static Future<bool> sendFlashlightToggle({String? deviceId}) async {
+    return send('flashlight-toggle', deviceId: deviceId);
   }
 
   static Future<bool> sendExtraControl({
@@ -70,7 +58,7 @@ class CommandService {
     await AuthService.ensureAuth();
 
     try {
-      final deviceSecret = deviceId?.trim();
+      final selectedDeviceId = deviceId?.trim();
 
       String command;
 
@@ -88,12 +76,8 @@ class CommandService {
         if (value != null) 'value': value,
         if (value != null) 'extra_value': value,
         if (enabled != null) 'enabled': enabled,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'device_id': deviceSecret,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'secret': deviceSecret,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'device_secret': deviceSecret,
+        if (selectedDeviceId != null && selectedDeviceId.isNotEmpty)
+          'device_id': selectedDeviceId,
       };
 
       final res = await http.post(
@@ -107,7 +91,7 @@ class CommandService {
       debugPrint('[EXTRA] status: ${res.statusCode}');
       debugPrint('[EXTRA] response: ${res.body}');
 
-      return res.statusCode >= 200 && res.statusCode < 300;
+      return _isSuccessResponse(res);
     } catch (e) {
       debugPrint('[EXTRA] error: $e');
       return false;
@@ -115,9 +99,21 @@ class CommandService {
   }
 
   static Future<void> stop({String? deviceId}) async {
-    await send(
-      'stop',
-      deviceId: deviceId,
-    );
+    await send('stop', deviceId: deviceId);
+  }
+
+  static bool _isSuccessResponse(http.Response res) {
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return false;
+    }
+
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic> && decoded.containsKey('success')) {
+        return decoded['success'] == true;
+      }
+    } catch (_) {}
+
+    return true;
   }
 }
