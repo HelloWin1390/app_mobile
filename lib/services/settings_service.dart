@@ -11,6 +11,7 @@ class SettingsService {
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
+
     final settings = AppSettings.decode(
       prefs.getString(_key),
     );
@@ -76,8 +77,9 @@ class SettingsService {
     await save(
       current.copyWith(
         devices: updated,
-        selectedDeviceId:
-            current.selectedDeviceId.isEmpty ? device.id : current.selectedDeviceId,
+        selectedDeviceId: current.selectedDeviceId.isEmpty
+            ? device.id
+            : current.selectedDeviceId,
       ),
     );
   }

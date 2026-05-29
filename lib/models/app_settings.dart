@@ -80,13 +80,12 @@ class AppSettings {
   final String selectedDeviceId;
   final List<EspDevice> devices;
 
-  /// button / toggle / slider
   final String extraControlType;
 
   /// dark / light
   final String themeMode;
 
-  /// Отдельная версия интерфейса для слабовидящих
+  /// Отдельный режим для слабовидящих
   final bool accessibilityMode;
 
   const AppSettings({

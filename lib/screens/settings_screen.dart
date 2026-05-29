@@ -156,7 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         TelemetryCard(data: _telemetry),
         const SizedBox(height: 16),
         Text(
-          'Телеметрия вынесена в отдельную вкладку, чтобы данные не дублировались в других разделах настроек.',
+          '',
           style: TextStyle(
             color: _mutedColor(context),
             fontSize: _accessibility ? 15 : 12,
@@ -255,15 +255,18 @@ class _SettingsScreenState extends State<SettingsScreen>
                   size: _accessibility ? 30 : 24,
                 ),
                 onChanged: (value) async {
-                  await SettingsService.saveAccessibilityMode(value);
+                  try {
+                    await SettingsService.saveAccessibilityMode(value);
+                    await _reloadSettings();
 
-                  await _reloadSettings();
-
-                  _showSnack(
-                    value
-                        ? 'Версия для слабовидящих включена'
-                        : 'Версия для слабовидящих выключена',
-                  );
+                    _showSnack(
+                      value
+                          ? 'Версия для слабовидящих включена'
+                          : 'Версия для слабовидящих выключена',
+                    );
+                  } catch (e) {
+                    _showSnack('Ошибка переключения режима: $e');
+                  }
                 },
               ),
             ],

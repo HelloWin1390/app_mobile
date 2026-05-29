@@ -90,7 +90,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const DeviceSelectionScreen(),
+        builder: (_) => DeviceSelectionScreen(),
       ),
     );
 
@@ -195,7 +195,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       decoration: BoxDecoration(
         color: _panel(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border(context)),
+        border: Border.all(
+          color: _border(context),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -209,12 +211,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             ),
           ),
           const SizedBox(width: 7),
-          Text(
-            text,
-            style: TextStyle(
-              color: effectiveColor,
-              fontSize: _accessibility ? 14 : 12,
-              fontWeight: FontWeight.w900,
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: effectiveColor,
+                fontSize: _accessibility ? 14 : 12,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
@@ -240,7 +244,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         decoration: BoxDecoration(
           color: _panel(context),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: _border(context)),
+          border: Border.all(
+            color: _border(context),
+          ),
           boxShadow: Theme.of(context).brightness == Brightness.light
               ? [
                   BoxShadow(
@@ -252,6 +258,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               : [],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
               width: _accessibility ? 56 : 48,
@@ -273,15 +280,20 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 children: [
                   Text(
                     title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: _text(context),
                       fontSize: _accessibility ? 19 : 17,
                       fontWeight: FontWeight.w800,
+                      height: 1.18,
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   Text(
                     subtitle,
+                    maxLines: _accessibility ? 5 : 3,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: _muted(context),
                       fontSize: _accessibility ? 15 : 13,
@@ -291,6 +303,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             Icon(
               Icons.chevron_right,
               color: enabled ? _muted(context) : _border(context),
@@ -302,111 +315,134 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 
+  Widget _header() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: _accessibility ? 60 : 54,
+          height: _accessibility ? 60 : 54,
+          decoration: BoxDecoration(
+            color: const Color(0xFF4F98A3).withOpacity(0.16),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFF4F98A3).withOpacity(0.35),
+            ),
+          ),
+          child: Icon(
+            Icons.smart_toy_outlined,
+            color: const Color(0xFF4F98A3),
+            size: _accessibility ? 34 : 30,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'BPNA Control',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _text(context),
+                  fontSize: _accessibility ? 30 : 28,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.4,
+                  height: 1.08,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Управление наземной беспилотной платформой',
+                maxLines: _accessibility ? 4 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _muted(context),
+                  fontSize: _accessibility ? 16 : 14,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: _loggingOut ? null : _logout,
+          icon: Icon(
+            Icons.logout,
+            color: _muted(context),
+            size: _accessibility ? 30 : 24,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg(context),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(_accessibility ? 22 : 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Container(
-                    width: _accessibility ? 60 : 54,
-                    height: _accessibility ? 60 : 54,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4F98A3).withOpacity(0.16),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFF4F98A3).withOpacity(0.35),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.all(_accessibility ? 22 : 20),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight -
+                      MediaQuery.of(context).padding.top -
+                      MediaQuery.of(context).padding.bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 18),
+                    _header(),
+                    const SizedBox(height: 18),
+                    _serverIndicator(),
+                    const SizedBox(height: 24),
+                    _menuButton(
+                      icon: Icons.videogame_asset,
+                      title: 'Управление платформой',
+                      subtitle:
+                          'Выбор онлайн-платформы, видеопоток, моторы и команды',
+                      onTap: _openControl,
+                    ),
+                    const SizedBox(height: 14),
+                    _menuButton(
+                      icon: Icons.settings,
+                      title: 'Настройки',
+                      subtitle:
+                          'Тема интерфейса, версия для слабовидящих и доп-управление',
+                      onTap: _openSettings,
+                    ),
+                    const SizedBox(height: 14),
+                    _menuButton(
+                      icon: Icons.monitor_heart_outlined,
+                      title: 'Телеметрия',
+                      subtitle: _controlledDeviceId == null
+                          ? 'Доступна после взятия платформы под управление'
+                          : 'История телеметрии выбранного устройства',
+                      onTap: _controlledDeviceId == null ? null : _openTelemetry,
+                    ),
+                    const SizedBox(height: 28),
+                    Center(
+                      child: Text(
+                        'Mobile operator panel',
+                        style: TextStyle(
+                          color: _muted(context).withOpacity(0.8),
+                          fontSize: _accessibility ? 14 : 12,
+                        ),
                       ),
                     ),
-                    child: Icon(
-                      Icons.smart_toy_outlined,
-                      color: const Color(0xFF4F98A3),
-                      size: _accessibility ? 34 : 30,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'BPNA Control',
-                          style: TextStyle(
-                            color: _text(context),
-                            fontSize: _accessibility ? 32 : 28,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Управление наземной беспилотной платформой',
-                          style: TextStyle(
-                            color: _muted(context),
-                            fontSize: _accessibility ? 16 : 14,
-                            height: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    onPressed: _loggingOut ? null : _logout,
-                    icon: Icon(
-                      Icons.logout,
-                      color: _muted(context),
-                      size: _accessibility ? 30 : 24,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              _serverIndicator(),
-              const SizedBox(height: 24),
-              _menuButton(
-                icon: Icons.videogame_asset,
-                title: 'Управление платформой',
-                subtitle:
-                    'Выбор онлайн-платформы, видеопоток, моторы и команды',
-                onTap: _openControl,
-              ),
-              const SizedBox(height: 14),
-              _menuButton(
-                icon: Icons.settings,
-                title: 'Настройки',
-                subtitle:
-                    'Тема интерфейса, версия для слабовидящих и доп-управление',
-                onTap: _openSettings,
-              ),
-              const SizedBox(height: 14),
-              _menuButton(
-                icon: Icons.monitor_heart_outlined,
-                title: 'Телеметрия',
-                subtitle: _controlledDeviceId == null
-                    ? 'Доступна после взятия платформы под управление'
-                    : 'История телеметрии выбранного устройства',
-                onTap: _controlledDeviceId == null ? null : _openTelemetry,
-              ),
-              const Spacer(),
-              Center(
-                child: Text(
-                  'Mobile operator panel',
-                  style: TextStyle(
-                    color: _muted(context).withOpacity(0.8),
-                    fontSize: _accessibility ? 14 : 12,
-                  ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

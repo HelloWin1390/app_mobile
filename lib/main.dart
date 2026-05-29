@@ -31,9 +31,6 @@ class BpnaApp extends StatelessWidget {
       ),
       scaffoldBackgroundColor: const Color(0xFF171614),
       useMaterial3: true,
-      textTheme: Typography.whiteMountainView.apply(
-        fontSizeFactor: accessibility ? 1.08 : 1.0,
-      ),
       visualDensity: accessibility
           ? VisualDensity.comfortable
           : VisualDensity.standard,
@@ -51,9 +48,6 @@ class BpnaApp extends StatelessWidget {
       ),
       scaffoldBackgroundColor: const Color(0xFFF4F6F8),
       useMaterial3: true,
-      textTheme: Typography.blackMountainView.apply(
-        fontSizeFactor: accessibility ? 1.08 : 1.0,
-      ),
       visualDensity: accessibility
           ? VisualDensity.comfortable
           : VisualDensity.standard,
@@ -80,10 +74,8 @@ class BpnaApp extends StatelessWidget {
             return MediaQuery(
               data: media.copyWith(
                 textScaler: accessibility
-                    ? const TextScaler.linear(1.14)
+                    ? const TextScaler.linear(1.18)
                     : const TextScaler.linear(1.0),
-                boldText: accessibility,
-                highContrast: accessibility,
               ),
               child: child ?? const SizedBox.shrink(),
             );

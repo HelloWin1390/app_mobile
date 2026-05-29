@@ -72,11 +72,59 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   bool get _leftMotorActive => _leftMotor.abs() > 0.03;
   bool get _rightMotorActive => _rightMotor.abs() > 0.03;
 
+  bool get _accessibility => _settings.accessibilityMode;
+
   @override
   void initState() {
     super.initState();
     _setLandscapeMode();
     _init();
+  }
+
+  bool _isLight(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.light;
+  }
+
+  Color _bg(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFFF4F6F8)
+        : const Color(0xFF171614);
+  }
+
+  Color _panel(BuildContext context) {
+    return _isLight(context)
+        ? Colors.white.withOpacity(0.92)
+        : Colors.black.withOpacity(0.90);
+  }
+
+  Color _panelStrong(BuildContext context) {
+    return _isLight(context)
+        ? Colors.white.withOpacity(0.96)
+        : const Color(0xFF1C1B19).withOpacity(0.90);
+  }
+
+  Color _border(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFFD9DEE3)
+        : Colors.white.withOpacity(0.12);
+  }
+
+  Color _text(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF1F2933)
+        : const Color(0xFFCDCCCA);
+  }
+
+  Color _muted(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF667085)
+        : const Color(0xFF797876);
+  }
+
+  Color _accent(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF167C8C)
+        : const Color(0xFF4F98A3);
   }
 
   Future<void> _setLandscapeMode() async {
@@ -207,7 +255,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: const Color(0xFF2D2C2A),
+        backgroundColor: _isLight(context)
+            ? const Color(0xFF263238)
+            : const Color(0xFF2D2C2A),
       ),
     );
   }
@@ -528,15 +578,20 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   Widget _buildVideoBackground() {
     return Positioned.fill(
       child: Container(
-        color: Colors.black,
+        color: _isLight(context)
+            ? const Color(0xFFE8EEF2)
+            : Colors.black,
         child: _lastFrame != null
             ? Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.memory(
-                    _lastFrame!,
-                    gaplessPlayback: true,
-                    fit: BoxFit.contain,
+                  Container(
+                    color: Colors.black,
+                    child: Image.memory(
+                      _lastFrame!,
+                      gaplessPlayback: true,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   if (_detectionEnabled && _detectionBoxes.isNotEmpty)
                     IgnorePointer(
@@ -562,21 +617,23 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
                     ),
                 ],
               )
-            : const Center(
+            : Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.videocam_off,
-                      color: Color(0xFF5A5957),
-                      size: 54,
+                      color: _muted(context),
+                      size: _accessibility ? 64 : 54,
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Text(
                       'Нет видео сигнала',
                       style: TextStyle(
-                        color: Color(0xFF797876),
-                        fontSize: 15,
+                        color: _muted(context),
+                        fontSize: _accessibility ? 18 : 15,
+                        fontWeight:
+                            _accessibility ? FontWeight.w800 : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -618,10 +675,13 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
   Widget _signalQuality() {
     final bars = _signalBars;
     final color = _signalColor;
+    final inactive = _isLight(context)
+        ? const Color(0xFFD1D5DB)
+        : Colors.white.withOpacity(0.22);
 
     return SizedBox(
-      width: 24,
-      height: 18,
+      width: _accessibility ? 30 : 24,
+      height: _accessibility ? 22 : 18,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: List.generate(
@@ -630,11 +690,11 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
             final active = index < bars;
 
             return Container(
-              width: 4,
+              width: _accessibility ? 5 : 4,
               height: 6.0 + index * 3.0,
               margin: const EdgeInsets.only(right: 2),
               decoration: BoxDecoration(
-                color: active ? color : Colors.white.withOpacity(0.22),
+                color: active ? color : inactive,
                 borderRadius: BorderRadius.circular(2),
               ),
             );
@@ -650,16 +710,16 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
       children: [
         Icon(
           icon,
-          color: const Color(0xFFCDCCCA),
-          size: 16,
+          color: _text(context),
+          size: _accessibility ? 19 : 16,
         ),
         const SizedBox(width: 4),
         Text(
           text,
-          style: const TextStyle(
-            color: Color(0xFFCDCCCA),
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
+          style: TextStyle(
+            color: _text(context),
+            fontSize: _accessibility ? 14 : 12,
+            fontWeight: FontWeight.w900,
           ),
         ),
       ],
@@ -682,51 +742,58 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         : (_selectedDeviceId.isNotEmpty ? _selectedDeviceId : '-');
 
     return Container(
-      height: 50,
+      height: _accessibility ? 58 : 50,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.90),
+        color: _panel(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withOpacity(0.12),
+          color: _border(context),
         ),
+        boxShadow: _isLight(context)
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : [],
       ),
-      child: Row(
-        children: [
-          _signalQuality(),
-          const SizedBox(width: 18),
-          _statusItem(Icons.thermostat, tempText),
-          const SizedBox(width: 18),
-          _statusItem(Icons.battery_charging_full, batteryText),
-          const SizedBox(width: 18),
-          _statusItem(Icons.speed, pingText),
-          const SizedBox(width: 18),
-          _statusItem(Icons.timer, _elapsedStr),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.memory,
-                  color: Color(0xFFCDCCCA),
-                  size: 16,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'ID: $deviceText',
-                    style: const TextStyle(
-                      color: Color(0xFFCDCCCA),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _signalQuality(),
+            const SizedBox(width: 18),
+            _statusItem(Icons.thermostat, tempText),
+            const SizedBox(width: 18),
+            _statusItem(Icons.battery_charging_full, batteryText),
+            const SizedBox(width: 18),
+            _statusItem(Icons.speed, pingText),
+            const SizedBox(width: 18),
+            _statusItem(Icons.timer, _elapsedStr),
+            const SizedBox(width: 18),
+            Icon(
+              Icons.memory,
+              color: _text(context),
+              size: _accessibility ? 19 : 16,
             ),
-          ),
-        ],
+            const SizedBox(width: 4),
+            SizedBox(
+              width: _accessibility ? 230 : 190,
+              child: Text(
+                'ID: $deviceText',
+                style: TextStyle(
+                  color: _text(context),
+                  fontSize: _accessibility ? 14 : 12,
+                  fontWeight: FontWeight.w900,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -738,42 +805,42 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     Color? activeColor,
   }) {
     final color = active
-        ? (activeColor ?? const Color(0xFF4F98A3))
-        : const Color(0xFFCDCCCA);
+        ? (activeColor ?? _accent(context))
+        : _text(context);
 
     return IconButton(
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withOpacity(0.62),
+        backgroundColor: _panel(context),
         side: BorderSide(
-          color: Colors.white.withOpacity(0.12),
+          color: _border(context),
         ),
       ),
       icon: Icon(
         icon,
         color: color,
-        size: 22,
+        size: _accessibility ? 26 : 22,
       ),
     );
   }
 
   Widget _recordingStatusChip() {
     return Container(
-      height: 36,
+      height: _accessibility ? 40 : 36,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1B19).withOpacity(0.90),
+        color: _panelStrong(context),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withOpacity(0.12),
+          color: _border(context),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: _accessibility ? 10 : 8,
+            height: _accessibility ? 10 : 8,
             decoration: const BoxDecoration(
               color: Color(0xFFDD6974),
               shape: BoxShape.circle,
@@ -782,9 +849,9 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
           const SizedBox(width: 7),
           Text(
             _recordingSaving ? 'SAVE' : _recordingElapsedStr,
-            style: const TextStyle(
-              color: Color(0xFFCDCCCA),
-              fontSize: 12,
+            style: TextStyle(
+              color: _text(context),
+              fontSize: _accessibility ? 14 : 12,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -802,64 +869,67 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
     );
   }
 
-  Widget _rightActionBar() {
-    return Positioned(
-      right: 12,
-      top: 62,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 6,
-          vertical: 5,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.42),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.10),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_recording || _recordingSaving) ...[
-              _recordingStatusChip(),
-              const SizedBox(width: 4),
-            ],
-            _recordActionButton(),
-            _actionButton(
-              icon: Icons.camera_alt,
-              onPressed: _takeSnapshot,
-            ),
-            _actionButton(
-              icon:
-                  _flashlightOn ? Icons.flashlight_on : Icons.flashlight_off,
-              active: _flashlightOn,
-              activeColor: const Color(0xFFFFD166),
-              onPressed: _toggleFlashlight,
-            ),
-            _actionButton(
-              icon: Icons.route,
-              active: _trajectoryEnabled,
-              onPressed: () {
-                setState(() {
-                  _trajectoryEnabled = !_trajectoryEnabled;
-                });
-              },
-            ),
-            _actionButton(
-              icon: Icons.center_focus_strong,
-              active: _detectionEnabled,
-              onPressed: () {
-                setState(() {
-                  _detectionEnabled = !_detectionEnabled;
-                });
-              },
-            ),
-          ],
+Widget _rightActionBar() {
+  final actionBarRightOffset = _accessibility ? 132.0 : 118.0;
+
+  return Positioned(
+    right: actionBarRightOffset,
+    top: 62,
+    child: Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 6,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: _panel(context).withOpacity(_isLight(context) ? 0.72 : 0.42),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _border(context),
         ),
       ),
-    );
-  }
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_recording || _recordingSaving) ...[
+            _recordingStatusChip(),
+            const SizedBox(width: 4),
+          ],
+          _recordActionButton(),
+          _actionButton(
+            icon: Icons.camera_alt,
+            onPressed: _takeSnapshot,
+          ),
+          _actionButton(
+            icon: _flashlightOn
+                ? Icons.flashlight_on
+                : Icons.flashlight_off,
+            active: _flashlightOn,
+            activeColor: const Color(0xFFFFB703),
+            onPressed: _toggleFlashlight,
+          ),
+          _actionButton(
+            icon: Icons.route,
+            active: _trajectoryEnabled,
+            onPressed: () {
+              setState(() {
+                _trajectoryEnabled = !_trajectoryEnabled;
+              });
+            },
+          ),
+          _actionButton(
+            icon: Icons.center_focus_strong,
+            active: _detectionEnabled,
+            onPressed: () {
+              setState(() {
+                _detectionEnabled = !_detectionEnabled;
+              });
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _bottomExtraButton() {
     final type = _settings.extraControlType;
@@ -871,31 +941,32 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         bottom: 18,
         child: Center(
           child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 10,
+            padding: EdgeInsets.symmetric(
+              horizontal: _accessibility ? 18 : 16,
+              vertical: _accessibility ? 12 : 10,
             ),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.62),
+              color: _panel(context),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: Colors.white.withOpacity(0.14),
+                color: _border(context),
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'ДОП',
                   style: TextStyle(
-                    color: Color(0xFFCDCCCA),
-                    fontWeight: FontWeight.w800,
+                    color: _text(context),
+                    fontWeight: FontWeight.w900,
+                    fontSize: _accessibility ? 16 : 14,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Switch(
                   value: _extraToggleOn,
-                  activeColor: const Color(0xFF4F98A3),
+                  activeColor: _accent(context),
                   onChanged: _setExtraToggle,
                 ),
               ],
@@ -911,24 +982,25 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         right: 170,
         bottom: 18,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 10,
+          padding: EdgeInsets.symmetric(
+            horizontal: _accessibility ? 18 : 16,
+            vertical: _accessibility ? 12 : 10,
           ),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.62),
+            color: _panel(context),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: Colors.white.withOpacity(0.14),
+              color: _border(context),
             ),
           ),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'ДОП',
                 style: TextStyle(
-                  color: Color(0xFFCDCCCA),
-                  fontWeight: FontWeight.w800,
+                  color: _text(context),
+                  fontWeight: FontWeight.w900,
+                  fontSize: _accessibility ? 16 : 14,
                 ),
               ),
               const SizedBox(width: 12),
@@ -937,19 +1009,22 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
                   value: _extraSliderValue,
                   min: 0,
                   max: 1,
-                  activeColor: const Color(0xFF4F98A3),
-                  inactiveColor: const Color(0xFF393836),
+                  activeColor: _accent(context),
+                  inactiveColor: _isLight(context)
+                      ? const Color(0xFFD1D5DB)
+                      : const Color(0xFF393836),
                   onChanged: _setExtraSlider,
                 ),
               ),
               SizedBox(
-                width: 42,
+                width: _accessibility ? 52 : 42,
                 child: Text(
                   '${(_extraSliderValue * 100).round()}%',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    color: Color(0xFFCDCCCA),
-                    fontWeight: FontWeight.w800,
+                  style: TextStyle(
+                    color: _text(context),
+                    fontWeight: FontWeight.w900,
+                    fontSize: _accessibility ? 15 : 14,
                   ),
                 ),
               ),
@@ -967,22 +1042,22 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         child: ElevatedButton(
           onPressed: _sendExtraButtonCommand,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4F98A3),
+            backgroundColor: _accent(context),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 34,
-              vertical: 15,
+            padding: EdgeInsets.symmetric(
+              horizontal: _accessibility ? 38 : 34,
+              vertical: _accessibility ? 17 : 15,
             ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
             elevation: 8,
           ),
-          child: const Text(
+          child: Text(
             'ДОП КНОПКА',
             style: TextStyle(
               fontWeight: FontWeight.w900,
-              fontSize: 15,
+              fontSize: _accessibility ? 17 : 15,
               letterSpacing: 0.7,
             ),
           ),
@@ -1008,11 +1083,15 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
           Navigator.pop(context);
         },
         style: IconButton.styleFrom(
-          backgroundColor: Colors.black.withOpacity(0.58),
+          backgroundColor: _panel(context),
+          side: BorderSide(
+            color: _border(context),
+          ),
         ),
-        icon: const Icon(
+        icon: Icon(
           Icons.arrow_back,
-          color: Color(0xFFCDCCCA),
+          color: _text(context),
+          size: _accessibility ? 30 : 24,
         ),
       ),
     );
@@ -1026,13 +1105,15 @@ class _DroneControlScreenState extends State<DroneControlScreen> {
         (size.height - 145).clamp(170.0, 280.0).toDouble();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF171614),
+      backgroundColor: _bg(context),
       body: Stack(
         children: [
           _buildVideoBackground(),
           Positioned.fill(
             child: Container(
-              color: Colors.black.withOpacity(0.10),
+              color: _isLight(context)
+                  ? Colors.white.withOpacity(0.04)
+                  : Colors.black.withOpacity(0.10),
             ),
           ),
           if (_trajectoryEnabled)
@@ -1127,6 +1208,46 @@ class _MotorSlider extends StatelessWidget {
     required this.onRelease,
   });
 
+  bool _isLight(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.light;
+  }
+
+  Color _panel(BuildContext context) {
+    return _isLight(context)
+        ? Colors.white.withOpacity(0.92)
+        : Colors.black.withOpacity(0.62);
+  }
+
+  Color _track(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFFF8FAFC)
+        : Colors.black.withOpacity(0.58);
+  }
+
+  Color _border(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFFD9DEE3)
+        : Colors.white.withOpacity(0.16);
+  }
+
+  Color _text(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF1F2933)
+        : const Color(0xFFCDCCCA);
+  }
+
+  Color _muted(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF667085)
+        : const Color(0xFF797876);
+  }
+
+  Color _accent(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF167C8C)
+        : const Color(0xFF4F98A3);
+  }
+
   void _softSliderHaptic() {
     unawaited(HapticFeedback.selectionClick());
   }
@@ -1155,30 +1276,42 @@ class _MotorSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final thumbY = (1 - (value + 1) / 2) * trackHeight;
+    final accessibility = MediaQuery.textScalerOf(context).scale(10) > 11;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 82,
+          width: accessibility ? 94 : 82,
           padding: const EdgeInsets.symmetric(
             horizontal: 8,
             vertical: 7,
           ),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.62),
+            color: _panel(context),
             borderRadius: BorderRadius.circular(13),
             border: Border.all(
-              color: Colors.white.withOpacity(0.12),
+              color: _border(context),
             ),
+            boxShadow: _isLight(context)
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ]
+                : [],
           ),
           child: Column(
             children: [
               Text(
                 '$_label $_percent%',
-                style: const TextStyle(
-                  color: Color(0xFF4F98A3),
-                  fontSize: 11,
+                style: TextStyle(
+                  color: value.abs() > 0.04
+                      ? _accent(context)
+                      : _muted(context),
+                  fontSize: accessibility ? 13 : 11,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -1216,28 +1349,40 @@ class _MotorSlider extends StatelessWidget {
             onRelease();
           },
           child: SizedBox(
-            width: 86,
+            width: accessibility ? 94 : 86,
             height: trackHeight,
             child: Center(
               child: Container(
-                width: 64,
+                width: accessibility ? 72 : 64,
                 height: trackHeight,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.58),
+                  color: _track(context),
                   borderRadius: BorderRadius.circular(40),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.16),
+                    color: _border(context),
+                    width: accessibility ? 2 : 1,
                   ),
+                  boxShadow: _isLight(context)
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.07),
+                            blurRadius: 12,
+                            offset: const Offset(0, 5),
+                          ),
+                        ]
+                      : [],
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Center(
                       child: Container(
-                        width: 4,
+                        width: accessibility ? 5 : 4,
                         height: trackHeight - 24,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.16),
+                          color: _isLight(context)
+                              ? const Color(0xFFD1D5DB)
+                              : Colors.white.withOpacity(0.16),
                           borderRadius: BorderRadius.circular(99),
                         ),
                       ),
@@ -1247,8 +1392,10 @@ class _MotorSlider extends StatelessWidget {
                       left: 12,
                       right: 12,
                       child: Container(
-                        height: 2,
-                        color: Colors.white.withOpacity(0.38),
+                        height: accessibility ? 3 : 2,
+                        color: _isLight(context)
+                            ? const Color(0xFF9CA3AF)
+                            : Colors.white.withOpacity(0.38),
                       ),
                     ),
                     if (value.abs() > 0.04)
@@ -1261,46 +1408,59 @@ class _MotorSlider extends StatelessWidget {
                         height: value.abs() * trackHeight / 2,
                         child: Center(
                           child: Container(
-                            width: 5,
+                            width: accessibility ? 7 : 5,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4F98A3),
+                              color: _accent(context),
                               borderRadius: BorderRadius.circular(99),
                             ),
                           ),
                         ),
                       ),
                     Positioned(
-                      top: thumbY - 23,
+                      top: thumbY - (accessibility ? 27 : 23),
                       left: 0,
                       right: 0,
                       child: Center(
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 60),
-                          width: 46,
-                          height: 46,
+                          width: accessibility ? 54 : 46,
+                          height: accessibility ? 54 : 46,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: value.abs() > 0.04
-                                ? const Color(0xFF4F98A3)
-                                : const Color(0xFF2D2C2A),
+                                ? _accent(context)
+                                : (_isLight(context)
+                                    ? Colors.white
+                                    : const Color(0xFF2D2C2A)),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.20),
+                              color: _isLight(context)
+                                  ? const Color(0xFFD1D5DB)
+                                  : Colors.white.withOpacity(0.20),
+                              width: accessibility ? 2 : 1,
                             ),
                             boxShadow: value.abs() > 0.04
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFF4F98A3)
-                                          .withOpacity(0.48),
+                                      color: _accent(context).withOpacity(0.42),
                                       blurRadius: 18,
                                       spreadRadius: 2,
                                     ),
                                   ]
-                                : [],
+                                : [
+                                    if (_isLight(context))
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                  ],
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.drag_handle,
-                            color: Colors.white,
-                            size: 22,
+                            color: value.abs() > 0.04
+                                ? Colors.white
+                                : _text(context),
+                            size: accessibility ? 26 : 22,
                           ),
                         ),
                       ),

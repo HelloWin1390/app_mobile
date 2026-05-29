@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/app_settings.dart';
 import '../models/server_device.dart';
 import '../services/auth_service.dart';
 import '../services/device_service.dart';
+import '../services/settings_service.dart';
 import 'drone_control_screen.dart';
 import 'login_screen.dart';
 
@@ -22,24 +24,43 @@ class DeviceSelectionScreen extends StatefulWidget {
 
 class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
   List<ServerDevice> _devices = [];
+
   Timer? _pollTimer;
 
   bool _loading = true;
   bool _refreshing = false;
+  bool _actionInProgress = false;
+
   String? _error;
+  AppSettings _settings = AppSettings.defaults();
+
+  bool get _accessibility => _settings.accessibilityMode;
 
   @override
   void initState() {
     super.initState();
+
+    _loadSettings();
     _loadDevices();
+
     _pollTimer = Timer.periodic(
       const Duration(seconds: 10),
       (_) => _loadDevices(silent: true),
     );
   }
 
+  Future<void> _loadSettings() async {
+    final settings = await SettingsService.load();
+
+    if (!mounted) return;
+
+    setState(() {
+      _settings = settings;
+    });
+  }
+
   Future<void> _loadDevices({bool silent = false}) async {
-    if (!silent) {
+    if (!silent && mounted) {
       setState(() {
         _refreshing = true;
         _error = null;
@@ -58,383 +79,483 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
         _refreshing = false;
         _error = null;
       });
-    } catch (e) {
+
+      await _loadSettings();
+    } catch (_) {
       if (!mounted) return;
 
       final sessionLost = AuthService.token == null;
+
       setState(() {
         _loading = false;
         _refreshing = false;
-        _error = sessionLost ? 'Сессия истекла. Войдите заново.' : e.toString();
+        _error = sessionLost
+            ? 'Сессия истекла. Выполните вход повторно.'
+            : 'Не удалось загрузить список платформ';
       });
 
       if (sessionLost) {
-        _openLogin();
+        _goLogin();
       }
     }
   }
 
-  void _showSnack(String msg) {
+  void _goLogin() {
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(),
+      ),
+      (_) => false,
+    );
+  }
+
+  void _showSnack(String message) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: const Color(0xFF2D2C2A)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: _isLight(context)
+            ? const Color(0xFF263238)
+            : const Color(0xFF2D2C2A),
+      ),
     );
   }
 
-  Future<void> _selectDevice(ServerDevice device) async {
-    await DeviceService.selectDevice(device, _devices);
-
-    if (!mounted) return;
-
-    if (widget.returnToPreviousOnSelect) {
-      Navigator.pop(context);
-      return;
-    }
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const DroneControlScreen()),
-    );
+  bool _isLight(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.light;
   }
 
-  Future<void> _claimDevice(ServerDevice device) async {
-    setState(() {
-      _refreshing = true;
-    });
-
-    final ok = await DeviceService.claimDevice(device.deviceId);
-
-    if (!mounted) return;
-
-    setState(() {
-      _refreshing = false;
-    });
-
-    if (!ok) {
-      _showSnack('Дрон уже занят или недоступен');
-      await _loadDevices(silent: true);
-      return;
-    }
-
-    await _selectDevice(device);
+  Color _bg(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFFF4F6F8)
+        : const Color(0xFF171614);
   }
 
-  Future<void> _resumeDevice(ServerDevice device) async {
-    await DeviceService.resumeControl(device.deviceId);
-    await _selectDevice(device);
+  Color _panel(BuildContext context) {
+    return _isLight(context) ? Colors.white : const Color(0xFF1C1B19);
   }
 
-  Future<void> _releaseDevice(ServerDevice device) async {
-    final ok = await DeviceService.releaseDevice(device.deviceId);
-    _showSnack(ok ? 'Управление освобождено' : 'Не удалось освободить дрон');
-    await _loadDevices(silent: true);
+  Color _border(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFFD9DEE3)
+        : const Color(0xFF393836);
   }
 
-  Future<void> _logout() async {
-    await DeviceService.releaseCurrentDevice();
-    await AuthService.logout();
-
-    if (!mounted) return;
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
-    );
+  Color _text(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF1F2933)
+        : const Color(0xFFCDCCCA);
   }
 
-  void _openLogin() {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
-    );
+  Color _muted(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF667085)
+        : const Color(0xFF797876);
   }
 
-  String _statusLabel(ServerDevice device) {
-    if (device.status == 'busy') return 'Занят';
-    if (device.status == 'online') return 'Онлайн';
-    return 'Оффлайн';
+  Color _accent(BuildContext context) {
+    return _isLight(context)
+        ? const Color(0xFF167C8C)
+        : const Color(0xFF4F98A3);
   }
 
   Color _statusColor(ServerDevice device) {
-    if (device.status == 'busy') return const Color(0xFFD19900);
-    if (device.status == 'online') return const Color(0xFF6DAA45);
-    return const Color(0xFF797876);
+    if (device.youControl) {
+      return const Color(0xFF4F98A3);
+    }
+
+    if (device.isOnline) {
+      return const Color(0xFF6DAA45);
+    }
+
+    if (device.isBusy) {
+      return const Color(0xFFD19900);
+    }
+
+    return const Color(0xFFDD6974);
   }
 
-  String _formatLastSeen(String? value) {
-    if (value == null || value.trim().isEmpty) return '-';
+  String _statusText(ServerDevice device) {
+    if (device.youControl) {
+      return 'Под вашим управлением';
+    }
+
+    if (device.isOnline) {
+      return 'Доступна';
+    }
+
+    if (device.isBusy) {
+      final user = device.controllerUsername?.trim();
+
+      return user == null || user.isEmpty
+          ? 'Занята другим оператором'
+          : 'Занята: $user';
+    }
+
+    return 'Офлайн';
+  }
+
+  Future<void> _openDevice(ServerDevice device) async {
+    if (_actionInProgress) return;
+
+    if (device.isOffline) {
+      _showSnack('Платформа сейчас офлайн');
+      return;
+    }
+
+    if (device.isBusy && !device.youControl) {
+      _showSnack('Платформа уже занята другим оператором');
+      return;
+    }
+
+    setState(() {
+      _actionInProgress = true;
+    });
 
     try {
-      final dt = DateTime.parse(value).toLocal();
-      return '${dt.day.toString().padLeft(2, '0')}.'
-          '${dt.month.toString().padLeft(2, '0')} '
-          '${dt.hour.toString().padLeft(2, '0')}:'
-          '${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return value;
+      bool ok = true;
+
+      if (device.youControl) {
+        await DeviceService.resumeControl(device.deviceId);
+      } else {
+        ok = await DeviceService.claimDevice(device.deviceId);
+      }
+
+      if (!ok) {
+        _showSnack('Не удалось взять платформу под управление');
+        return;
+      }
+
+      await DeviceService.selectDevice(device, _devices);
+      await _loadSettings();
+
+      if (!mounted) return;
+
+      if (widget.returnToPreviousOnSelect) {
+        Navigator.pop(context, device.deviceId);
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const DroneControlScreen(),
+        ),
+      );
+
+      await _loadDevices(silent: true);
+    } catch (e) {
+      _showSnack('Ошибка выбора платформы: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _actionInProgress = false;
+        });
+      }
     }
   }
 
-  Widget _statusBadge(ServerDevice device) {
-    final color = _statusColor(device);
+  Future<void> _releaseDevice(ServerDevice device) async {
+    if (_actionInProgress) return;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.38)),
-      ),
-      child: Text(
-        _statusLabel(device),
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
+    setState(() {
+      _actionInProgress = true;
+    });
+
+    try {
+      final ok = await DeviceService.releaseDevice(device.deviceId);
+
+      if (ok) {
+        _showSnack('Управление платформой освобождено');
+      } else {
+        _showSnack('Не удалось освободить платформу');
+      }
+
+      await _loadDevices(silent: true);
+    } catch (e) {
+      _showSnack('Ошибка освобождения платформы: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _actionInProgress = false;
+        });
+      }
+    }
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'Нет доступных платформ.\nПроверьте подключение ESP32-CAM к серверу.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: _muted(context),
+            fontSize: _accessibility ? 17 : 14,
+            height: 1.35,
+            fontWeight: _accessibility ? FontWeight.w700 : FontWeight.w400,
+          ),
         ),
       ),
     );
   }
 
-  Widget _deviceButton(ServerDevice device) {
-    if (device.youControl) {
-      return ElevatedButton.icon(
-        onPressed: _refreshing ? null : () => _resumeDevice(device),
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('Продолжить'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF4F98A3),
-          foregroundColor: Colors.white,
+  Widget _errorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              color: const Color(0xFFDD6974),
+              size: _accessibility ? 48 : 40,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _error ?? 'Ошибка загрузки',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _text(context),
+                fontSize: _accessibility ? 17 : 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: _refreshing ? null : () => _loadDevices(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Повторить'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _accent(context),
+                side: BorderSide(
+                  color: _accent(context),
+                ),
+              ),
+            ),
+          ],
         ),
-      );
-    }
-
-    if (device.isOnline) {
-      return ElevatedButton.icon(
-        onPressed: _refreshing ? null : () => _claimDevice(device),
-        icon: const Icon(Icons.sports_esports),
-        label: const Text('Взять управление'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF4F98A3),
-          foregroundColor: Colors.white,
-        ),
-      );
-    }
-
-    return OutlinedButton.icon(
-      onPressed: null,
-      icon: const Icon(Icons.lock_outline),
-      label: const Text('Занят'),
+      ),
     );
   }
 
   Widget _deviceCard(ServerDevice device) {
-    final controller = device.controllerUsername?.trim();
+    final statusColor = _statusColor(device);
+    final selected = device.deviceId == _settings.selectedDeviceId;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1B19),
-        borderRadius: BorderRadius.circular(14),
+        color: _panel(context),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: device.youControl
-              ? const Color(0xFF4F98A3)
-              : const Color(0xFF393836),
+          color: selected ? _accent(context) : _border(context),
+          width: selected || _accessibility ? 2 : 1,
         ),
+        boxShadow: _isLight(context)
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : [],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => _openDevice(device),
+        child: Padding(
+          padding: EdgeInsets.all(_accessibility ? 18 : 15),
+          child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: _accessibility ? 58 : 50,
+                height: _accessibility ? 58 : 50,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4F98A3).withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
+                  color: statusColor.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.memory, color: Color(0xFF4F98A3)),
+                child: Icon(
+                  device.connected
+                      ? Icons.smart_toy_outlined
+                      : Icons.wifi_off_outlined,
+                  color: statusColor,
+                  size: _accessibility ? 32 : 26,
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       device.displayName,
-                      style: const TextStyle(
-                        color: Color(0xFFCDCCCA),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _text(context),
+                        fontSize: _accessibility ? 18 : 15,
+                        fontWeight: FontWeight.w900,
+                        height: 1.18,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 5),
                     Text(
                       device.deviceId,
-                      style: const TextStyle(
-                        color: Color(0xFF797876),
-                        fontSize: 12,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _muted(context),
+                        fontSize: _accessibility ? 14 : 12,
+                        fontWeight: _accessibility
+                            ? FontWeight.w700
+                            : FontWeight.w400,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          width: _accessibility ? 10 : 8,
+                          height: _accessibility ? 10 : 8,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            _statusText(device),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: _accessibility ? 14 : 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              _statusBadge(device),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _metaRow('Подключение', device.connected ? 'Есть' : 'Нет'),
-          _metaRow('Последний сигнал', _formatLastSeen(device.lastSeen)),
-          _metaRow(
-            'Оператор',
-            controller == null || controller.isEmpty ? '-' : controller,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _deviceButton(device)),
-              if (device.youControl) ...[
-                const SizedBox(width: 10),
+              const SizedBox(width: 8),
+              if (device.youControl)
                 IconButton(
-                  onPressed: _refreshing ? null : () => _releaseDevice(device),
-                  style: IconButton.styleFrom(
-                    foregroundColor: const Color(0xFFDD6974),
-                    side: const BorderSide(color: Color(0xFF393836)),
+                  onPressed: () => _releaseDevice(device),
+                  tooltip: 'Освободить',
+                  icon: Icon(
+                    Icons.logout,
+                    color: const Color(0xFFDD6974),
+                    size: _accessibility ? 30 : 24,
                   ),
-                  icon: const Icon(Icons.link_off),
+                )
+              else
+                Icon(
+                  Icons.chevron_right,
+                  color: _muted(context),
+                  size: _accessibility ? 32 : 26,
                 ),
-              ],
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _metaRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: Color(0xFF797876), fontSize: 12),
-          ),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFFCDCCCA),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _content() {
-    final visibleDevices = _devices
-        .where((device) => device.isOnline || device.youControl)
-        .toList();
-
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF4F98A3)),
+        child: CircularProgressIndicator(
+          color: Color(0xFF4F98A3),
+        ),
       );
     }
 
     if (_error != null) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+      return _errorState();
+    }
+
+    if (_devices.isEmpty) {
+      return _emptyState();
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _loadDevices(),
+      color: _accent(context),
+      child: ListView(
+        padding: EdgeInsets.all(_accessibility ? 18 : 16),
         children: [
-          const SizedBox(height: 90),
-          const Icon(Icons.cloud_off, color: Color(0xFF797876), size: 50),
-          const SizedBox(height: 14),
           Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFF797876), fontSize: 14),
+            'Выберите платформу для управления',
+            style: TextStyle(
+              color: _text(context),
+              fontSize: _accessibility ? 20 : 17,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ],
-      );
-    }
-
-    if (visibleDevices.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
-        children: const [
-          SizedBox(height: 90),
-          Icon(Icons.memory, color: Color(0xFF797876), size: 50),
-          SizedBox(height: 14),
+          const SizedBox(height: 6),
           Text(
-            'Онлайн-дронов пока нет',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF797876), fontSize: 14),
+            'Доступные устройства обновляются автоматически. Управление можно открыть только для онлайн-платформы.',
+            style: TextStyle(
+              color: _muted(context),
+              fontSize: _accessibility ? 15 : 13,
+              height: 1.3,
+              fontWeight: _accessibility ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
+          const SizedBox(height: 18),
+          ..._devices.map(_deviceCard),
+          const SizedBox(height: 18),
         ],
-      );
-    }
-
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-      children: visibleDevices.map(_deviceCard).toList(),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthService.currentUser;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF171614),
+      backgroundColor: _bg(context),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1C1B19),
-        foregroundColor: const Color(0xFFCDCCCA),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Онлайн-дроны'),
-            if (user != null)
-              Text(
-                user.username,
-                style: const TextStyle(color: Color(0xFF797876), fontSize: 12),
-              ),
-          ],
+        backgroundColor: _panel(context),
+        foregroundColor: _text(context),
+        elevation: 0,
+        title: Text(
+          'Выбор платформы',
+          style: TextStyle(
+            fontSize: _accessibility ? 21 : 18,
+            fontWeight: FontWeight.w900,
+          ),
         ),
         actions: [
           IconButton(
             onPressed: _refreshing ? null : () => _loadDevices(),
-            icon: const Icon(Icons.refresh),
+            icon: _refreshing
+                ? SizedBox(
+                    width: _accessibility ? 26 : 22,
+                    height: _accessibility ? 26 : 22,
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF4F98A3),
+                    ),
+                  )
+                : Icon(
+                    Icons.refresh,
+                    size: _accessibility ? 30 : 24,
+                  ),
           ),
-          IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
         ],
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: const Color(0xFF393836), height: 1),
-        ),
       ),
-      body: RefreshIndicator(
-        color: const Color(0xFF4F98A3),
-        backgroundColor: const Color(0xFF1C1B19),
-        onRefresh: () => _loadDevices(),
-        child: _content(),
-      ),
+      body: _content(),
     );
   }
 
