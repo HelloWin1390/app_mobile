@@ -110,20 +110,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     await _checkServer(silent: true);
   }
 
-  Future<void> _openTelemetry() async {
-    final deviceId = _controlledDeviceId;
-
-    if (deviceId == null || deviceId.isEmpty) return;
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TelemetryHistoryScreen(deviceId: deviceId),
-      ),
-    );
-
-    await _checkServer(silent: true);
-  }
 
   Future<void> _logout() async {
     setState(() {
@@ -417,15 +403,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       subtitle:
                           'Тема интерфейса, версия для слабовидящих и доп-управление',
                       onTap: _openSettings,
-                    ),
-                    const SizedBox(height: 14),
-                    _menuButton(
-                      icon: Icons.monitor_heart_outlined,
-                      title: 'Телеметрия',
-                      subtitle: _controlledDeviceId == null
-                          ? 'Доступна после взятия платформы под управление'
-                          : 'История телеметрии выбранного устройства',
-                      onTap: _controlledDeviceId == null ? null : _openTelemetry,
                     ),
                     const SizedBox(height: 28),
                     Center(
