@@ -1,12 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+  import 'package:flutter/material.dart';
+  import 'package:flutter/services.dart';
 
-import 'models/app_settings.dart';
-import 'screens/auth_gate_screen.dart';
-import 'services/settings_service.dart';
+  import 'screens/server_setup_screen.dart';
+  import 'services/server_config_service.dart';
+  import 'models/app_settings.dart';
+  import 'screens/auth_gate_screen.dart';
+  import 'services/settings_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await ServerConfigService.load();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -80,7 +84,7 @@ class BpnaApp extends StatelessWidget {
               child: child ?? const SizedBox.shrink(),
             );
           },
-          home: const AuthGateScreen(),
+          home: const ServerSetupScreen(),
         );
       },
     );
